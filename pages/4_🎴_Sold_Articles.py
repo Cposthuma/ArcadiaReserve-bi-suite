@@ -42,9 +42,23 @@ with col3:
 # Display the number of cards sold per card_rarity
 st.markdown("---")
 st.markdown("### Articles Sold by Rarity")
-rarity_counts = df['card_rarities'].value_counts()
-st.bar_chart(rarity_counts)
 
+rarity_order = ['Common', 'Uncommon', 'Rare', 'Mythic', 'Land', 'Unknown']
+rarity_counts = (
+    df['card_rarities']
+    .value_counts()
+    .reindex(rarity_order)
+    .dropna()
+    .reset_index()
+)
+rarity_counts.columns = ['Rarity', 'Count']
+
+fig_rarity = px.bar(
+    rarity_counts,
+    x='Rarity', y='Count',
+    category_orders={'Rarity': rarity_order},
+)
+st.plotly_chart(fig_rarity, use_container_width=True)
 
 # ===============================
 # 🌳 Cards Sold by Set (Count)

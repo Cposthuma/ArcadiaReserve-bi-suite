@@ -91,9 +91,9 @@ st.markdown(f"""
 
 # ── Plotly base — light mode, margin excluded to avoid keyword conflicts ──────
 PLOTLY_BASE = dict(
-    paper_bgcolor=BG,
-    plot_bgcolor=BG,
-    font_color=TEXT,
+    paper_bgcolor=SURFACE,  # '#e8eed8' — slightly darker than page BG
+    plot_bgcolor=SURFACE,
+    font_color=TEXT,        # '#1e2a10' — always dark, always legible
 )
 M = dict(l=0, r=0, t=10, b=0)
 
@@ -211,14 +211,15 @@ with col_donut:
         hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
     )
     fig_donut.update_layout(
-        **PLOTLY_BASE,
+        paper_bgcolor=SURFACE,
+        font_color=TEXT,
         showlegend=False,
         annotations=[dict(
             text='Revenue',
-            font=dict(family='DM Serif Display', size=14, color=ACCENT2),
+            font=dict(family='DM Serif Display', size=14, color=TEXT),
             showarrow=False,
         )],
-        margin=dict(l=30, r=30, t=30, b=30),
+        margin=dict(l=80, r=80, t=60, b=80),
         height=420,
     )
     st.plotly_chart(fig_donut, use_container_width=True)
@@ -381,16 +382,18 @@ if 'card_rarities' in articles_df.columns:
             color_discrete_sequence=COUNTRY_PALETTE,
         )
         fig_rar_count.update_traces(
-            textposition='outside',
-            textinfo='label+percent',
+            textposition='none',
+            textinfo='none',
             hovertemplate='<b>%{label}</b><br>%{value} cards<br>%{percent}<extra></extra>',
         )
         fig_rar_count.update_layout(
-            paper_bgcolor=BG,
+            paper_bgcolor=SURFACE,
             font_color=TEXT,
-            title=dict(text='Cards Sold by Rarity', font=dict(color=MUTED, size=12), x=0.05),
-            showlegend=False,
-            margin=dict(l=20, r=20, t=40, b=20),
+            title=dict(text='Cards Sold by Rarity', font=dict(color=TEXT, size=12), x=0.5, xanchor='center'),
+            showlegend=True,
+            legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color=TEXT)),
+            margin=dict(l=20, r=120, t=50, b=20),
+            height=400,
         )
         st.plotly_chart(fig_rar_count, use_container_width=True)
 
@@ -402,16 +405,18 @@ if 'card_rarities' in articles_df.columns:
             color_discrete_sequence=COUNTRY_PALETTE,
         )
         fig_rar_rev.update_traces(
-            textposition='outside',
-            textinfo='label+percent',
+            textposition='none',
+            textinfo='none',
             hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
         )
         fig_rar_rev.update_layout(
-            paper_bgcolor=BG,
+            paper_bgcolor=SURFACE,
             font_color=TEXT,
-            title=dict(text='Revenue Share by Rarity', font=dict(color=MUTED, size=12), x=0.05),
-            showlegend=False,
-            margin=dict(l=20, r=20, t=40, b=20),
+            title=dict(text='Revenue Share by Rarity', font=dict(color=TEXT, size=12), x=0.5, xanchor='center'),
+            showlegend=True,
+            legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color=TEXT)),
+            margin=dict(l=20, r=120, t=50, b=20),
+            height=400,
         )
         st.plotly_chart(fig_rar_rev, use_container_width=True)
 
@@ -431,11 +436,12 @@ if 'card_rarities' in articles_df.columns:
         )
         fig_rar_avg.update_layout(
             **PLOTLY_BASE,
-            title=dict(text='Avg Price per Rarity', font=dict(color=MUTED, size=12), x=0),
+            title=dict(text='Avg Price per Rarity', font=dict(color=TEXT, size=12), x=0),
             coloraxis_showscale=False,
             xaxis=dict(tickangle=-30, automargin=True),
             yaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
             margin=dict(l=0, r=0, t=30, b=60),
+            height=400,
         )
         st.plotly_chart(fig_rar_avg, use_container_width=True)
 

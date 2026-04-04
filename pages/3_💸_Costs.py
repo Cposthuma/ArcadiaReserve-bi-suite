@@ -101,14 +101,16 @@ if not st.session_state.authenticated:
         </div>
         """, unsafe_allow_html=True)
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-        pwd = st.text_input("Password", type="password", label_visibility="collapsed",
-                            placeholder="Enter password…")
-        if st.button("Unlock", use_container_width=True):
-            if pwd == CORRECT_PASSWORD:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Incorrect password. Please try again.")
+        with st.form("login_form"):
+            pwd = st.text_input("Password", type="password", label_visibility="collapsed",
+                                placeholder="Enter password…")
+            submitted = st.form_submit_button("Unlock", use_container_width=True)
+            if submitted:
+                if pwd == CORRECT_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect password. Please try again.")
     st.stop()
 
 # ── Load data ─────────────────────────────────────────────────────────────────
@@ -226,34 +228,40 @@ for col, label, val, sub in [
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── Row 1: Monthly spend line + Category donut ────────────────────────────────
-st.markdown('<div class="section-header">Spend Over Time</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-header">Spenditure Over Time</div>', unsafe_allow_html=True)
 
 col_left, col_right = st.columns([3, 2])
-
 with col_left:
     monthly = (
         dff.groupby(['Month', 'Cost_Category'])['Item_Price']
         .sum()
         .reset_index()
     )
-    fig_line = px.area(
+    fig_bar = px.bar(
         monthly,
         x='Month', y='Item_Price',
         color='Cost_Category',
         color_discrete_map=CATEGORY_COLORS,
         labels={'Item_Price': 'Spend (€)', 'Month': ''},
-        template='plotly_dark',
+        barmode='stack',
+        title='Monthly Spend by Category',
     )
-    fig_line.update_layout(
+    fig_bar.update_layout(
         paper_bgcolor='#1a1a2e',
         plot_bgcolor='#1a1a2e',
+        title=dict(
+            text='Monthly Spend by Category',
+            font=dict(family='DM Serif Display', size=16, color='#e8e4ff'),
+            x=0.5,
+            xanchor='center',
+        ),
         legend_title_text='',
-        legend=dict(orientation='h', y=-0.2),
-        margin=dict(l=0, r=0, t=10, b=0),
+        legend=dict(orientation='h', y=-0.2, font=dict(color='#e8e4ff')),
+        margin=dict(l=0, r=0, t=50, b=0),
         hovermode='x unified',
+        yaxis=dict(tickprefix='€'),
     )
-    fig_line.update_traces(line_width=2)
-    st.plotly_chart(fig_line, use_container_width=True)
+    st.plotly_chart(fig_bar, use_container_width=True)
 
 with col_right:
     cat_totals = dff.groupby('Cost_Category')['Item_Price'].sum().reset_index()
@@ -265,11 +273,23 @@ with col_right:
         color_discrete_map=CATEGORY_COLORS,
         template='plotly_dark',
     )
-    fig_donut.update_traces(textposition='outside', textinfo='label+percent')
+    fig_donut.update_traces(
+        textposition='none',
+        textinfo='none',
+        hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
+    )
     fig_donut.update_layout(
         paper_bgcolor='#1a1a2e',
-        showlegend=False,
-        margin=dict(l=20, r=20, t=20, b=20),
+        font_color='#e8e4ff',
+        title=dict(
+            text='Spend by Category',
+            font=dict(family='DM Serif Display', size=16, color='#e8e4ff'),
+            x=0.5,
+            xanchor='center',
+        ),
+        showlegend=True,
+        legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color='#e8e4ff')),
+        margin=dict(l=20, r=120, t=50, b=20),
         annotations=[dict(
             text=f"€{total_spend:,.0f}",
             font=dict(family='DM Serif Display', size=18, color='#e8e4ff'),
@@ -277,7 +297,6 @@ with col_right:
         )],
     )
     st.plotly_chart(fig_donut, use_container_width=True)
-
 # ── Row 2: Country grouped bar + Heatmap ─────────────────────────────────────
 st.markdown('<div class="section-header">Country Breakdown</div>', unsafe_allow_html=True)
 
