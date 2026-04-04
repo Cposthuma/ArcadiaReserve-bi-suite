@@ -299,18 +299,18 @@ with col_b:
     )
     fig_donut.update_traces(textposition='outside', textinfo='label+percent')
     fig_donut.update_layout(
-        paper_bgcolor='#1a1a2e',
+        paper_bgcolor=BG,
         showlegend=False,
         margin=dict(l=80, r=80, t=60, b=80),
         title=dict(
             text='Revenue vs Commission Breakdown',
-            font=dict(family='DM Serif Display', size=16, color='#e8e4ff'),
+            font=dict(family='DM Serif Display', size=16, color=ACCENT2),
             x=0.5,
             xanchor='center',
         ),
         annotations=[dict(
             text=f"€{total_gross:,.0f}",
-            font=dict(family='DM Serif Display', size=18, color='#e8e4ff'),
+            font=dict(family='DM Serif Display', size=18, color=ACCENT2),
             showarrow=False,
         )],
     )
