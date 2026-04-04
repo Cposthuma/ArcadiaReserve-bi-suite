@@ -291,23 +291,26 @@ with col_b:
         hole=0.55,
         color='Component',
         color_discrete_map={
-            'Net Revenue (Merchandise + Shipping)': ACCENT,
-            'Commission':                            NEG,
+            'Net Revenue': '#7b5ea7',
+            'Commission':  '#e05c6c',
         },
+        template='plotly_dark',
+        title='Revenue vs Commission Breakdown',
     )
-    fig_donut.update_traces(
-        textposition='outside',
-        textinfo='label+percent',
-        hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
-    )
+    fig_donut.update_traces(textposition='outside', textinfo='label+percent')
     fig_donut.update_layout(
-        paper_bgcolor=BG,
-        font_color=TEXT,
+        paper_bgcolor='#1a1a2e',
         showlegend=False,
-        margin=dict(l=20, r=20, t=20, b=20),
+        margin=dict(l=80, r=80, t=60, b=80),
+        title=dict(
+            text='Revenue vs Commission Breakdown',
+            font=dict(family='DM Serif Display', size=16, color='#e8e4ff'),
+            x=0.5,
+            xanchor='center',
+        ),
         annotations=[dict(
-            text=f"€{total_gross:,.2f}",
-            font=dict(family='DM Serif Display', size=16, color=ACCENT2),
+            text=f"€{total_gross:,.0f}",
+            font=dict(family='DM Serif Display', size=18, color='#e8e4ff'),
             showarrow=False,
         )],
     )
