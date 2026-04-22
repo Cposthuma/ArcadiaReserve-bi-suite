@@ -5,7 +5,6 @@ services:
     ports:
       - "8501:8501"
     environment:
-      DATA_SOURCE: local
       DATA_DIR: /app/data
     volumes:
       - ./data:/app/data:ro

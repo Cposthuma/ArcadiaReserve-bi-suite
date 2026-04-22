@@ -5,8 +5,7 @@ Dit project visualiseert CardMarket orders, sold articles en kosten in een Strea
 ## ✅ Wat is aangepast
 
 - Klaar voor hosting in een Docker registry/repo (met `Dockerfile` + `docker-compose.yml`).
-- Dashboard draait nu standaard op **lokale bestanden** in plaats van cloud/S3.
-- S3 blijft optioneel beschikbaar via environment variables.
+- Dashboard draait op **lokale bestanden** uit de `data/` map.
 
 ---
 
@@ -48,7 +47,6 @@ Run:
 
 ```bash
 docker run --rm -p 8501:8501 \
-  -e DATA_SOURCE=local \
   -e DATA_DIR=/app/data \
   -v "$(pwd)/data:/app/data:ro" \
   arcadia-bi-suite:latest
@@ -62,14 +60,7 @@ Gebruik `.env.example` als referentie.
 
 ### Lokale modus (default)
 
-- `DATA_SOURCE=local`
 - `DATA_DIR=./data` (of `/app/data` in Docker)
-
-### S3 modus (optioneel)
-
-- `DATA_SOURCE=s3`
-- `S3_BUCKET_NAME=...`
-- `S3_REGION=...`
 
 ---
 

@@ -13,11 +13,11 @@ render_data_reload_button(key="reload_sold_articles")
 
 st.title("🎴 Sold Articles Overview")
 
-# Load data from S3
+# Load local data
 df = load_articles_data()
 
 if df is None:
-    st.error("Could not load articles data. Please check your S3 bucket configuration.")
+    st.error("Could not load articles data. Controleer of de CSV lokaal in de data map staat.")
     st.stop()
 
 # Display the dataframe

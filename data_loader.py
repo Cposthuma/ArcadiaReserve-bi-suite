@@ -1,23 +1,12 @@
-"""
-Data loader for CardMarket Dashboard.
-Supports local files (default) and S3 URLs (optional via env vars).
-"""
+"""Local data loader for CardMarket Dashboard."""
 import os
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# Data source configuration
-# - local (default): read from /app/data (Docker) or ./data (local)
-# - s3: keep backward-compatible remote loading
-DATA_SOURCE = os.getenv("DATA_SOURCE", "local").strip().lower()
+# Local data configuration
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
-
-# Optional S3 configuration
-BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "mtg-streamlit-dashboard-s3-bucket")
-S3_REGION = os.getenv("S3_REGION", "eu-central-1")
-PUBLIC_BASE_URL = f"https://{BUCKET_NAME}.s3.{S3_REGION}.amazonaws.com"
 
 # Expected filenames
 ORDERS_FILENAME = "cardmarket_orders_data.csv"
@@ -33,11 +22,6 @@ ORDERS_LOCAL_PATH = DATA_DIR / ORDERS_FILENAME
 ARTICLES_LOCAL_PATH = DATA_DIR / ARTICLES_FILENAME
 EXPENSES_LOCAL_PATH = DATA_DIR / EXPENSES_FILENAME
 
-# S3 paths
-ORDERS_S3_URL = f"{PUBLIC_BASE_URL}/public/exports/{ORDERS_FILENAME}"
-ARTICLES_S3_URL = f"{PUBLIC_BASE_URL}/public/exports/{ARTICLES_FILENAME}"
-EXPENSES_S3_URL = f"{PUBLIC_BASE_URL}/raw/monthly_expenses/{EXPENSES_FILENAME}"
-
 
 def _clean_numeric(series: pd.Series) -> pd.Series:
     """Robustly convert a column to float."""
@@ -50,12 +34,6 @@ def _clean_numeric(series: pd.Series) -> pd.Series:
         .str.replace(",", ".", regex=False)
         .pipe(pd.to_numeric, errors="coerce")
     )
-
-
-def _resolve_source(local_path: Path, s3_url: str) -> str:
-    if DATA_SOURCE == "s3":
-        return s3_url
-    return str(local_path)
 
 
 def _read_csv_flexible(path_or_url: str) -> pd.DataFrame:
@@ -130,7 +108,7 @@ def _find_local_file(
     st.error(f"Missing local {label} file.")
     st.info(
         f"Place a matching file in `{DATA_DIR}` or `{preferred_subdir}` "
-        f"(extensions: {', '.join(allowed_extensions)}), or switch DATA_SOURCE=s3."
+        f"(extensions: {', '.join(allowed_extensions)})."
     )
     visible_candidates = sorted(
         p.relative_to(DATA_DIR).as_posix()
@@ -148,28 +126,24 @@ def _find_local_file(
 
 @st.cache_data(ttl=3600)
 def load_orders_data():
-    """Load orders data from configured source."""
-    source = ORDERS_S3_URL
-    local_path = ORDERS_LOCAL_PATH
+    """Load orders data from local files."""
+    resolved = _find_local_file(
+        label="orders",
+        preferred_path=ORDERS_LOCAL_PATH,
+        preferred_subdir=ORDERS_DIR,
+        known_filenames=[
+            ORDERS_FILENAME,
+            "PurchaseData.csv",
+            "Orders.csv",
+            "order_exports.csv",
+        ],
+        keyword_patterns=["purchase", "order", "orders", "buying"],
+        allowed_extensions=(".csv",),
+    )
+    if resolved is None:
+        return None
 
-    if DATA_SOURCE != "s3":
-        resolved = _find_local_file(
-            label="orders",
-            preferred_path=ORDERS_LOCAL_PATH,
-            preferred_subdir=ORDERS_DIR,
-            known_filenames=[
-                ORDERS_FILENAME,
-                "PurchaseData.csv",
-                "Orders.csv",
-                "order_exports.csv",
-            ],
-            keyword_patterns=["purchase", "order", "orders", "buying"],
-            allowed_extensions=(".csv",),
-        )
-        if resolved is None:
-            return None
-        local_path = resolved
-        source = str(local_path)
+    source = str(resolved)
 
     try:
         df = _read_csv_flexible(source)
@@ -190,28 +164,24 @@ def load_orders_data():
 
 @st.cache_data(ttl=3600)
 def load_articles_data():
-    """Load sold articles data from configured source."""
-    source = ARTICLES_S3_URL
-    local_path = ARTICLES_LOCAL_PATH
+    """Load sold articles data from local files."""
+    resolved = _find_local_file(
+        label="articles",
+        preferred_path=ARTICLES_LOCAL_PATH,
+        preferred_subdir=ARTICLES_DIR,
+        known_filenames=[
+            ARTICLES_FILENAME,
+            "SalesData.csv",
+            "SoldArticles.csv",
+            "sold_articles.csv",
+        ],
+        keyword_patterns=["sold", "sales", "selling", "article"],
+        allowed_extensions=(".csv",),
+    )
+    if resolved is None:
+        return None
 
-    if DATA_SOURCE != "s3":
-        resolved = _find_local_file(
-            label="articles",
-            preferred_path=ARTICLES_LOCAL_PATH,
-            preferred_subdir=ARTICLES_DIR,
-            known_filenames=[
-                ARTICLES_FILENAME,
-                "SalesData.csv",
-                "SoldArticles.csv",
-                "sold_articles.csv",
-            ],
-            keyword_patterns=["sold", "sales", "selling", "article"],
-            allowed_extensions=(".csv",),
-        )
-        if resolved is None:
-            return None
-        local_path = resolved
-        source = str(local_path)
+    source = str(resolved)
 
     try:
         df = _read_csv_flexible(source)
@@ -228,31 +198,27 @@ def load_articles_data():
 
 @st.cache_data(ttl=3600)
 def load_expenses_data():
-    """Load monthly expenses data from configured source."""
-    source = EXPENSES_S3_URL
-    local_path = EXPENSES_LOCAL_PATH
+    """Load monthly expenses data from local files."""
+    resolved = _find_local_file(
+        label="expenses",
+        preferred_path=EXPENSES_LOCAL_PATH,
+        preferred_subdir=EXPENSES_DIR,
+        known_filenames=[
+            "Expenses.ods",
+            "Expenses.xlsx",
+            "Expenses.xls",
+            "Expenses.csv",
+        ],
+        keyword_patterns=["expense", "expenses", "cost"],
+        allowed_extensions=(".ods", ".xlsx", ".xls", ".csv"),
+    )
+    if resolved is None:
+        return None
 
-    if DATA_SOURCE != "s3":
-        resolved = _find_local_file(
-            label="expenses",
-            preferred_path=EXPENSES_LOCAL_PATH,
-            preferred_subdir=EXPENSES_DIR,
-            known_filenames=[
-                "Expenses.ods",
-                "Expenses.xlsx",
-                "Expenses.xls",
-                "Expenses.csv",
-            ],
-            keyword_patterns=["expense", "expenses", "cost"],
-            allowed_extensions=(".ods", ".xlsx", ".xls", ".csv"),
-        )
-        if resolved is None:
-            return None
-        local_path = resolved
-        source = str(local_path)
+    source = str(resolved)
 
     try:
-        suffix = local_path.suffix.lower() if DATA_SOURCE != "s3" else Path(source).suffix.lower()
+        suffix = resolved.suffix.lower()
         if suffix == ".csv":
             df = pd.read_csv(source)
         elif suffix == ".ods":
