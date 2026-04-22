@@ -1,310 +1,273 @@
-"""Local-only data loader for CardMarket Dashboard."""
+"""Core local data loading + normalization for ArcadiaReserve BI dashboard."""
+from __future__ import annotations
+
 import os
 from pathlib import Path
+from typing import Iterable
 
 import pandas as pd
 import streamlit as st
 
-# Local-only data configuration
 DATA_DIR_ENV = os.getenv("DATA_DIR")
 
-# Expected filenames
-ORDERS_FILENAME = "cardmarket_orders_data.csv"
-ARTICLES_FILENAME = "cardmarket_articles_sold.csv"
-EXPENSES_FILENAME = "Expenses.ods"
+CSV_EXTENSIONS = (".csv",)
+TABULAR_EXTENSIONS = (".csv", ".xlsx", ".xls", ".ods")
 
 
-def _resolve_data_dir() -> Path:
-    """Resolve DATA_DIR robustly across local and Docker runs."""
+# -----------------------------
+# Generic helpers
+# -----------------------------
+def resolve_data_dir() -> Path:
+    """Resolve where local data files are loaded from."""
     module_root = Path(__file__).resolve().parent
 
     if DATA_DIR_ENV:
         configured = Path(DATA_DIR_ENV).expanduser()
         if configured.is_absolute():
             return configured
-
-        # Relative DATA_DIR should work regardless of current working directory.
-        candidates = [
-            Path.cwd() / configured,
-            module_root / configured,
-        ]
-        for candidate in candidates:
+        for candidate in (Path.cwd() / configured, module_root / configured):
             if candidate.exists():
                 return candidate.resolve()
-        return candidates[0].resolve()
+        return (Path.cwd() / configured).resolve()
 
-    # No env var: prefer local repository data/ folder.
-    default_candidates = [
-        Path.cwd() / "data",
-        module_root / "data",
-    ]
-    for candidate in default_candidates:
+    for candidate in (Path.cwd() / "data", module_root / "data"):
         if candidate.exists():
             return candidate.resolve()
-
-    return default_candidates[0].resolve()
-
-
-DATA_DIR = _resolve_data_dir()
-
-# Local paths (support both root `data/` and subfolders)
-ORDERS_DIR = DATA_DIR / "orders"
-ARTICLES_DIR = DATA_DIR / "articles"
-EXPENSES_DIR = DATA_DIR / "expenses"
-
-ORDERS_LOCAL_PATH = DATA_DIR / ORDERS_FILENAME
-ARTICLES_LOCAL_PATH = DATA_DIR / ARTICLES_FILENAME
-EXPENSES_LOCAL_PATH = DATA_DIR / EXPENSES_FILENAME
+    return (Path.cwd() / "data").resolve()
 
 
-def _clean_numeric(series: pd.Series) -> pd.Series:
-    """Robustly convert a column to float."""
+DATA_DIR = resolve_data_dir()
+
+
+def iter_files(root: Path, exts: tuple[str, ...]) -> list[Path]:
+    if not root.exists():
+        return []
+    return sorted(
+        [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def clean_numeric(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return series.astype(float)
     return (
         series.astype(str)
-        .str.replace(r"[€$£\s]", "", regex=True)
-        .str.replace(r"\.(?=\d{3})", "", regex=True)
+        .str.replace(r"[^\d,.-]", "", regex=True)
+        .str.replace(r"\.(?=\d{3}(\D|$))", "", regex=True)
         .str.replace(",", ".", regex=False)
         .pipe(pd.to_numeric, errors="coerce")
     )
 
 
-def _read_csv_flexible(path_or_url: str) -> pd.DataFrame:
-    """Read CSV exports with robust separator + encoding fallbacks."""
-    attempts: list[tuple[str | None, str]] = [
-        (None, "utf-8"),
-        (";", "utf-8"),
-        (",", "utf-8"),
-        (None, "latin-1"),
-        (";", "latin-1"),
-        (",", "latin-1"),
-    ]
-
-    errors: list[str] = []
-    for sep, encoding in attempts:
-        try:
-            if sep is None:
-                df = pd.read_csv(path_or_url, sep=None, engine="python", encoding=encoding)
-            else:
-                df = pd.read_csv(path_or_url, sep=sep, encoding=encoding)
-
-            # A single unnamed mega-column usually means wrong delimiter inference.
-            if len(df.columns) == 1 and df.columns[0].startswith("Unnamed"):
-                continue
-            return df
-        except Exception as exc:
-            errors.append(f"sep={sep or 'auto'}, encoding={encoding}: {exc}")
-
-    raise ValueError("Unable to parse CSV. Attempts: " + " | ".join(errors))
-
-
-def _iter_files(root: Path, allowed_extensions: tuple[str, ...]) -> list[Path]:
-    """Safely collect files under root with allowed extensions."""
-    if not root.exists():
-        return []
-
-    files: list[Path] = []
-    for candidate in root.rglob("*"):
-        if candidate.is_file() and candidate.suffix.lower() in allowed_extensions:
-            files.append(candidate)
-    return files
-
-
-def _find_local_file(
-    label: str,
-    preferred_path: Path,
-    preferred_subdir: Path,
-    known_filenames: list[str],
-    keyword_patterns: list[str],
-    allowed_extensions: tuple[str, ...] = (".csv",),
-) -> Path | None:
-    """Find a local file in common export locations and names."""
-    candidates = [preferred_path, preferred_subdir / preferred_path.name]
-    candidates.extend(DATA_DIR / name for name in known_filenames)
-    candidates.extend(preferred_subdir / name for name in known_filenames)
-    known_names_lc = {name.lower() for name in known_filenames}
-    keyword_patterns_lc = [keyword.lower() for keyword in keyword_patterns]
-
-    for candidate in candidates:
-        if candidate.exists() and candidate.suffix.lower() in allowed_extensions:
-            return candidate
-
-    searchable_roots = [DATA_DIR]
-    if preferred_subdir != DATA_DIR:
-        searchable_roots.append(preferred_subdir)
-
-    pattern_hits: list[Path] = []
-    for root in searchable_roots:
-        for candidate in _iter_files(root, allowed_extensions):
-            candidate_name_lc = candidate.name.lower()
-            if candidate_name_lc in known_names_lc or any(
-                keyword in candidate_name_lc for keyword in keyword_patterns_lc
-            ):
-                pattern_hits.append(candidate)
-
-    if pattern_hits:
-        return max(pattern_hits, key=lambda p: p.stat().st_mtime)
-
-    checked_paths = "\n".join(f"- {path}" for path in candidates[:6])
-    st.error(f"Missing local {label} file in: {DATA_DIR}")
-    st.info(
-        "Deze app leest **alleen lokale bestanden** (geen S3). "
-        "Voeg je export toe in `data/`, `data/orders`, `data/articles` of `data/expenses`."
+def normalize_colname(name: str) -> str:
+    return (
+        name.strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("/", "_")
+        .replace("(", "")
+        .replace(")", "")
     )
-    st.code(f"Checked paths:\n{checked_paths}")
 
-    visible_candidates = sorted(
-        p.relative_to(DATA_DIR).as_posix() for p in _iter_files(DATA_DIR, allowed_extensions)
-    )
-    if visible_candidates:
-        st.info(
-            "Detected files: "
-            + ", ".join(visible_candidates[:10])
-            + (" …" if len(visible_candidates) > 10 else "")
-        )
+
+def pick_column(columns: Iterable[str], aliases: list[str]) -> str | None:
+    normalized = {normalize_colname(c): c for c in columns}
+    for alias in aliases:
+        if alias in normalized:
+            return normalized[alias]
     return None
 
 
+def read_flexible_table(path: Path) -> pd.DataFrame:
+    if path.suffix.lower() == ".csv":
+        attempts: list[tuple[str | None, str]] = [
+            (None, "utf-8"),
+            (";", "utf-8"),
+            (",", "utf-8"),
+            (None, "latin-1"),
+            (";", "latin-1"),
+            (",", "latin-1"),
+        ]
+        for sep, enc in attempts:
+            try:
+                if sep is None:
+                    return pd.read_csv(path, sep=None, engine="python", encoding=enc)
+                return pd.read_csv(path, sep=sep, encoding=enc)
+            except Exception:
+                continue
+        raise ValueError(f"CSV could not be parsed: {path}")
+
+    if path.suffix.lower() == ".ods":
+        return pd.read_excel(path, engine="odf")
+    return pd.read_excel(path)
+
+
+def discover_files(kind: str) -> list[Path]:
+    root = DATA_DIR
+    scoped = root / kind
+    files: list[Path] = []
+    if scoped.exists():
+        files.extend(iter_files(scoped, TABULAR_EXTENSIONS))
+    files.extend(iter_files(root, TABULAR_EXTENSIONS))
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for item in files:
+        key = str(item.resolve())
+        if key not in seen:
+            unique.append(item)
+            seen.add(key)
+    return unique
+
+
+def pick_best_file(files: list[Path], kind: str) -> Path | None:
+    """Pick the most likely file for a given domain based on filename signals."""
+    if not files:
+        return None
+
+    kind_signals: dict[str, list[str]] = {
+        "orders": [
+            "sold orders",
+            "orders-bypurchasedate",
+            "purchase",
+            "order",
+            "sold",
+        ],
+        "articles": [
+            "sold articles",
+            "salesdata",
+            "article",
+            "sales",
+            "cards",
+        ],
+        "expenses": [
+            "expenses",
+            "expense",
+            "cost",
+        ],
+    }
+
+    signals = kind_signals.get(kind, [])
+    scored: list[tuple[int, Path]] = []
+    for file in files:
+        name = file.name.lower()
+        score = sum(2 for signal in signals if signal in name)
+        if kind != "expenses" and any(x in name for x in ("expense", "cost")):
+            score -= 3
+        scored.append((score, file))
+
+    scored.sort(key=lambda x: (x[0], x[1].stat().st_mtime), reverse=True)
+    return scored[0][1]
+
+
+# -----------------------------
+# Domain loaders
+# -----------------------------
+@st.cache_data(ttl=3600)
+def load_orders_data() -> pd.DataFrame:
+    files = discover_files("orders")
+    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS]
+    selected = pick_best_file(candidates, "orders")
+    if not selected:
+        return pd.DataFrame()
+
+    df = read_flexible_table(selected)
+
+    date_col = pick_column(df.columns, ["date_of_purchase", "purchase_date", "date", "order_date"])
+    gross_col = pick_column(df.columns, ["total_value", "gross", "total", "order_total"])
+    commission_col = pick_column(df.columns, ["commission", "fees", "fee"])
+    shipping_col = pick_column(df.columns, ["shipment_costs", "shipping_costs", "shipping", "postage"])
+    country_col = pick_column(df.columns, ["country", "buyer_country", "destination_country"])
+
+    if not date_col or not gross_col:
+        return pd.DataFrame()
+
+    out = pd.DataFrame()
+    out["date"] = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True)
+    out["gross_value"] = clean_numeric(df[gross_col])
+    out["commission"] = clean_numeric(df[commission_col]) if commission_col else 0.0
+    out["shipping_cost"] = clean_numeric(df[shipping_col]) if shipping_col else 0.0
+    out["country"] = df[country_col].astype(str) if country_col else "Unknown"
+    out["net_value"] = out["gross_value"].fillna(0) - out["commission"].fillna(0)
+    out = out.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+    out["month"] = out["date"].dt.to_period("M").dt.to_timestamp()
+    return out
+
+
+@st.cache_data(ttl=3600)
+def load_articles_data() -> pd.DataFrame:
+    files = discover_files("articles")
+    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS]
+    selected = pick_best_file(candidates, "articles")
+    if not selected:
+        return pd.DataFrame()
+
+    df = read_flexible_table(selected)
+    price_col = pick_column(df.columns, ["card_prices", "price", "sold_price", "value"])
+    name_col = pick_column(df.columns, ["name", "card_name", "article", "product"])
+    set_col = pick_column(df.columns, ["set_names", "set_name", "set"])
+    rarity_col = pick_column(df.columns, ["card_rarities", "rarity"])
+    sold_date_col = pick_column(df.columns, ["sold_date", "date", "sale_date"])
+
+    if not price_col:
+        return pd.DataFrame()
+
+    out = pd.DataFrame()
+    out["price"] = clean_numeric(df[price_col])
+    out["name"] = df[name_col].astype(str) if name_col else "Unknown"
+    out["set_name"] = df[set_col].astype(str) if set_col else "Unknown"
+    out["rarity"] = df[rarity_col].astype(str) if rarity_col else "Unknown"
+    out["sold_date"] = pd.to_datetime(df[sold_date_col], errors="coerce", dayfirst=True) if sold_date_col else pd.NaT
+    out = out.dropna(subset=["price"]).reset_index(drop=True)
+    return out
+
+
+@st.cache_data(ttl=3600)
+def load_expenses_data() -> pd.DataFrame:
+    files = discover_files("expenses")
+    selected = pick_best_file(files, "expenses")
+    if not selected:
+        return pd.DataFrame()
+
+    df = read_flexible_table(selected)
+    date_col = pick_column(df.columns, ["order_date", "date", "purchase_date"])
+    price_col = pick_column(df.columns, ["item_price", "price", "amount", "cost"])
+    category_col = pick_column(df.columns, ["cost_category", "category", "expense_type"])
+    country_col = pick_column(df.columns, ["store_country", "country", "vendor_country"])
+
+    if not date_col or not price_col:
+        return pd.DataFrame()
+
+    out = pd.DataFrame()
+    out["order_date"] = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True)
+    out["item_price"] = clean_numeric(df[price_col])
+    out["cost_category"] = df[category_col].astype(str) if category_col else "Uncategorized"
+    out["store_country"] = df[country_col].astype(str) if country_col else "Unknown"
+    out = out.dropna(subset=["order_date", "item_price"]).sort_values("order_date").reset_index(drop=True)
+    out["month"] = out["order_date"].dt.to_period("M").dt.to_timestamp()
+    return out
+
+
 def get_data_diagnostics() -> dict[str, object]:
-    """Return runtime diagnostics for local file loading."""
-    all_local_files = [
-        p.relative_to(DATA_DIR).as_posix() for p in _iter_files(DATA_DIR, (".csv", ".ods", ".xlsx", ".xls"))
-    ]
+    files = [p.relative_to(DATA_DIR).as_posix() for p in iter_files(DATA_DIR, TABULAR_EXTENSIONS)]
     return {
-        "data_dir": str(DATA_DIR),
         "data_dir_env": DATA_DIR_ENV,
-        "data_dir_exists": DATA_DIR.exists(),
-        "orders_dir": str(ORDERS_DIR),
-        "articles_dir": str(ARTICLES_DIR),
-        "expenses_dir": str(EXPENSES_DIR),
-        "files": sorted(all_local_files),
+        "data_dir": str(DATA_DIR),
+        "exists": DATA_DIR.exists(),
+        "files": files,
     }
 
 
-@st.cache_data(ttl=3600)
-def load_orders_data():
-    """Load orders data from local files."""
-    resolved = _find_local_file(
-        label="orders",
-        preferred_path=ORDERS_LOCAL_PATH,
-        preferred_subdir=ORDERS_DIR,
-        known_filenames=[
-            ORDERS_FILENAME,
-            "PurchaseData.csv",
-            "Orders.csv",
-            "order_exports.csv",
-        ],
-        keyword_patterns=["purchase", "order", "orders", "buying"],
-        allowed_extensions=(".csv",),
-    )
-    if resolved is None:
-        return None
-
-    source = str(resolved)
-
-    try:
-        df = _read_csv_flexible(source)
-        df["Date of Purchase"] = pd.to_datetime(df["Date of Purchase"])
-
-        for col in ["Merchandise Value", "Shipment Costs", "Total Value", "Commission"]:
-            if col in df.columns:
-                df[col] = _clean_numeric(df[col])
-
-        df["Net Value"] = df["Total Value"] - df["Commission"]
-        df = df.sort_values("Date of Purchase").reset_index(drop=True)
-        return df
-    except Exception as e:
-        st.error(f"Error loading orders data: {e}")
-        st.error(f"Tried to load from: {source}")
-        return None
-
-
-@st.cache_data(ttl=3600)
-def load_articles_data():
-    """Load sold articles data from local files."""
-    resolved = _find_local_file(
-        label="articles",
-        preferred_path=ARTICLES_LOCAL_PATH,
-        preferred_subdir=ARTICLES_DIR,
-        known_filenames=[
-            ARTICLES_FILENAME,
-            "SalesData.csv",
-            "SoldArticles.csv",
-            "sold_articles.csv",
-        ],
-        keyword_patterns=["sold", "sales", "selling", "article"],
-        allowed_extensions=(".csv",),
-    )
-    if resolved is None:
-        return None
-
-    source = str(resolved)
-
-    try:
-        df = _read_csv_flexible(source)
-
-        if "card_prices" in df.columns:
-            df["card_prices"] = _clean_numeric(df["card_prices"])
-
-        return df
-    except Exception as e:
-        st.error(f"Error loading articles data: {e}")
-        st.error(f"Tried to load from: {source}")
-        return None
-
-
-@st.cache_data(ttl=3600)
-def load_expenses_data():
-    """Load monthly expenses data from local files."""
-    resolved = _find_local_file(
-        label="expenses",
-        preferred_path=EXPENSES_LOCAL_PATH,
-        preferred_subdir=EXPENSES_DIR,
-        known_filenames=[
-            "Expenses.ods",
-            "Expenses.xlsx",
-            "Expenses.xls",
-            "Expenses.csv",
-        ],
-        keyword_patterns=["expense", "expenses", "cost"],
-        allowed_extensions=(".ods", ".xlsx", ".xls", ".csv"),
-    )
-    if resolved is None:
-        return None
-
-    source = str(resolved)
-
-    try:
-        suffix = resolved.suffix.lower()
-        if suffix == ".csv":
-            df = pd.read_csv(source)
-        elif suffix == ".ods":
-            df = pd.read_excel(source, engine="odf")
-        else:
-            df = pd.read_excel(source)
-        df["Order_Date"] = pd.to_datetime(df["Order_Date"], dayfirst=True)
-
-        if "Item_Price" in df.columns:
-            df["Item_Price"] = _clean_numeric(df["Item_Price"])
-
-        df = df.sort_values("Order_Date").reset_index(drop=True)
-        return df
-    except Exception as e:
-        st.error(f"Error loading expenses data: {e}")
-        st.error(f"Tried to load from: {source}")
-        return None
-
-
-def refresh_data():
-    """Clear cache to force data refresh."""
+def refresh_data() -> None:
     st.cache_data.clear()
-    st.success("Data cache cleared! Reload the page to fetch fresh data.")
 
 
-def render_data_reload_button(*, key: str = "data_reload_sidebar") -> None:
-    """Render a sidebar button to clear cache and reload current page."""
+def render_data_reload_button(*, key: str) -> None:
     with st.sidebar:
-        if st.button("🔄 Reload data", key=key, use_container_width=True):
+        if st.button("🔄 Data opnieuw laden", key=key, use_container_width=True):
             refresh_data()
             st.rerun()

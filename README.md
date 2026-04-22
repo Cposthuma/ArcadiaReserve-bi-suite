@@ -1,87 +1,46 @@
-# ArcadiaReserve BI Suite
+# ArcadiaReserve BI Suite (Rebuilt)
 
-Dit project visualiseert CardMarket orders, sold articles en kosten in een Streamlit dashboard.
+Deze repository is opnieuw opgebouwd met een eenvoudige, robuuste Streamlit-architectuur.
 
-## ✅ Wat is aangepast
+## Wat je krijgt
 
-- Klaar voor hosting in een Docker registry/repo (met `Dockerfile` + `docker-compose.yml`).
-- Dashboard draait op **lokale bestanden** uit de `data/` map.
+- Volledig lokaal dashboard op basis van bestanden in `data/`
+- Automatische kolomnormalisatie voor:
+  - orders
+  - sold articles
+  - expenses
+- Nieuwe, consistente pagina's:
+  - Home
+  - Orders Overview
+  - Analytics
+  - Costs
+  - Sold Articles
+  - Settings
 
----
+## Data plaatsen
 
-## Lokale data (standaard)
+Plaats exports in:
 
-Plaats je databestanden in `./data` (of in de submappen hieronder):
+- `data/orders/`
+- `data/articles/`
+- `data/expenses/`
 
-- `data/orders/` → orders / PurchaseData exports (`.csv`)
-- `data/articles/` → sold articles / SalesData exports (`.csv`)
-- `data/expenses/` → expenses (`.csv`, `.xlsx`, `.xls`, `.ods`)
+Bestanden in `data/` root worden ook gelezen.
 
-Zie ook: `data/README.md`.
+Ondersteunde order-exportnamen bevatten o.a. patronen zoals:
+- `Sold Orders-byPurchaseDate-YYYY-MM-DD_YYYY-MM-DD.csv`
 
----
+## Lokaal runnen
 
-## Runnen met Docker Compose (aanbevolen)
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+## Met Docker Compose
 
 ```bash
 docker compose up --build
 ```
 
-Open daarna:
-
-- http://localhost:8501
-
-De container mount `./data` als read-only map in de app (`/app/data`).
-
----
-
-## Runnen met alleen Docker
-
-Build:
-
-```bash
-docker build -t arcadia-bi-suite:latest .
-```
-
-Run:
-
-```bash
-docker run --rm -p 8501:8501 \
-  -e DATA_DIR=/app/data \
-  -v "$(pwd)/data:/app/data:ro" \
-  arcadia-bi-suite:latest
-```
-
----
-
-## Environment configuratie
-
-Gebruik `.env.example` als referentie.
-
-### Lokale modus (default)
-
-- `DATA_DIR=./data` (of `/app/data` in Docker)
-
----
-
-## Publiceren naar een Docker repository
-
-Voorbeeld met Docker Hub:
-
-```bash
-docker build -t <dockerhub-user>/arcadia-bi-suite:latest .
-docker push <dockerhub-user>/arcadia-bi-suite:latest
-```
-
-Daarna kan je dezelfde image overal deployen.
-
-
-## Troubleshooting lokale data
-
-Als je meldingen krijgt dat bestanden ontbreken:
-
-- Controleer in **Settings → Local Data Diagnostics** welke map effectief gebruikt wordt (`Resolved data dir`).
-- De app draait **alleen lokaal** en haalt **geen data uit S3**.
-- Plaats exports in `data/` of in submappen `data/orders`, `data/articles`, `data/expenses`.
-- Klik op **Reload data** in de sidebar om de cache te verversen.
-
+Open daarna `http://localhost:8501`.
