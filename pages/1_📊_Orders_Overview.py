@@ -117,9 +117,10 @@ if df is None or df.empty:
     st.error("Could not load orders data.")
     st.stop()
 
-if articles_df is None or articles_df.empty:
-    st.error("Could not load articles data.")
-    st.stop()
+has_articles = articles_df is not None and not articles_df.empty
+if not has_articles:
+    articles_df = pd.DataFrame(columns=["price", "name", "set_name", "rarity", "sold_date"])
+    st.warning("Orders geladen, maar geen artikeldata gevonden. Ordervisuals blijven beschikbaar.")
 
 # ── Prep ──────────────────────────────────────────────────────────────────────
 df['date'] = pd.to_datetime(df['date'])
@@ -185,8 +186,8 @@ st.markdown('<div class="section-header">Singles Sold</div>', unsafe_allow_html=
 
 a1, a2, a3, a4 = st.columns(4)
 
-median_price = articles_df['price'].median()
-top_card     = articles_df.loc[articles_df['price'].idxmax()] if not articles_df.empty else None
+median_price = articles_df['price'].median() if has_articles else 0
+top_card     = articles_df.loc[articles_df['price'].idxmax()] if has_articles else None
 
 for col, label, val, sub in [
     (a1, "Singles Sold",     f"{len(articles_df):,}",                       "individual cards"),
@@ -317,46 +318,52 @@ st.markdown('<div class="section-header">Card Price Distribution</div>', unsafe_
 col_x, col_y = st.columns([2, 3])
 
 with col_x:
-    fig_hist = px.histogram(
-        articles_df,
-        x='price',
-        nbins=30,
-        labels={'price': 'Card Price (€)', 'count': 'Count'},
-        color_discrete_sequence=[ACCENT],
-    )
-    fig_hist.update_traces(hovertemplate='€%{x:.2f}<br>%{y} cards<extra></extra>')
-    fig_hist.update_layout(
-        **PLOTLY_BASE,
-        bargap=0.05,
-        xaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
-        yaxis=dict(gridcolor=GRID),
-        margin=M,
-    )
-    st.plotly_chart(fig_hist, use_container_width=True)
+    if has_articles:
+        fig_hist = px.histogram(
+            articles_df,
+            x='price',
+            nbins=30,
+            labels={'price': 'Card Price (€)', 'count': 'Count'},
+            color_discrete_sequence=[ACCENT],
+        )
+        fig_hist.update_traces(hovertemplate='€%{x:.2f}<br>%{y} cards<extra></extra>')
+        fig_hist.update_layout(
+            **PLOTLY_BASE,
+            bargap=0.05,
+            xaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
+            yaxis=dict(gridcolor=GRID),
+            margin=M,
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+    else:
+        st.info("Geen artikeldata beschikbaar voor prijsverdeling.")
 
 with col_y:
-    bins   = [0, 0.5, 1, 2, 5, 10, 25, 50, float('inf')]
-    labels = ['<€0.50', '€0.50–1', '€1–2', '€2–5', '€5–10', '€10–25', '€25–50', '€50+']
-    articles_df['Price Bucket'] = pd.cut(articles_df['price'], bins=bins, labels=labels)
-    bucket_counts = articles_df['Price Bucket'].value_counts().reindex(labels).reset_index()
-    bucket_counts.columns = ['Bucket', 'Count']
+    if has_articles:
+        bins   = [0, 0.5, 1, 2, 5, 10, 25, 50, float('inf')]
+        labels = ['<€0.50', '€0.50–1', '€1–2', '€2–5', '€5–10', '€10–25', '€25–50', '€50+']
+        price_bucket = pd.cut(articles_df['price'], bins=bins, labels=labels)
+        bucket_counts = price_bucket.value_counts().reindex(labels).reset_index()
+        bucket_counts.columns = ['Bucket', 'Count']
 
-    fig_buck = px.bar(
-        bucket_counts,
-        x='Bucket', y='Count',
-        labels={'Bucket': 'Price Range', 'Count': 'Cards Sold'},
-        color='Count',
-        color_continuous_scale=TEAL_GRAD,
-    )
-    fig_buck.update_traces(hovertemplate='<b>%{x}</b><br>%{y} cards<extra></extra>')
-    fig_buck.update_layout(
-        **PLOTLY_BASE,
-        coloraxis_showscale=False,
-        xaxis=dict(tickangle=-20),
-        yaxis=dict(gridcolor=GRID),
-        margin=M,
-    )
-    st.plotly_chart(fig_buck, use_container_width=True)
+        fig_buck = px.bar(
+            bucket_counts,
+            x='Bucket', y='Count',
+            labels={'Bucket': 'Price Range', 'Count': 'Cards Sold'},
+            color='Count',
+            color_continuous_scale=TEAL_GRAD,
+        )
+        fig_buck.update_traces(hovertemplate='<b>%{x}</b><br>%{y} cards<extra></extra>')
+        fig_buck.update_layout(
+            **PLOTLY_BASE,
+            coloraxis_showscale=False,
+            xaxis=dict(tickangle=-20),
+            yaxis=dict(gridcolor=GRID),
+            margin=M,
+        )
+        st.plotly_chart(fig_buck, use_container_width=True)
+    else:
+        st.info("Geen artikeldata beschikbaar voor prijsbuckets.")
 
 # ── Raw orders table ──────────────────────────────────────────────────────────
 with st.expander("📋 Raw Orders", expanded=False):

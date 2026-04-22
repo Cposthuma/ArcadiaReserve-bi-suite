@@ -105,9 +105,10 @@ if orders_df is None or orders_df.empty:
     st.error("Could not load orders data.")
     st.stop()
 
-if articles_df is None or articles_df.empty:
-    st.error("Could not load articles data.")
-    st.stop()
+has_articles = articles_df is not None and not articles_df.empty
+if not has_articles:
+    articles_df = pd.DataFrame(columns=["price", "name", "set_name", "rarity", "sold_date"])
+    st.warning("Orders geladen, maar geen artikeldata gevonden. De orderanalyses blijven beschikbaar.")
 
 # ── Prep ──────────────────────────────────────────────────────────────────────
 orders_df['date'] = pd.to_datetime(orders_df['date'])
@@ -366,7 +367,7 @@ st.plotly_chart(fig_bucket, use_container_width=True)
 # ══════════════════════════════════════════════════════════════════════════════
 # Section 7 — Rarity Breakdown
 # ══════════════════════════════════════════════════════════════════════════════
-if 'rarity' in articles_df.columns:
+if has_articles and 'rarity' in articles_df.columns:
     st.markdown('<div class="section-header">✨ Rarity Breakdown</div>', unsafe_allow_html=True)
 
     rarity_stats = (
@@ -452,7 +453,7 @@ if 'rarity' in articles_df.columns:
 # ══════════════════════════════════════════════════════════════════════════════
 # Section 8 — Set Performance
 # ══════════════════════════════════════════════════════════════════════════════
-if 'set_name' in articles_df.columns:
+if has_articles and 'set_name' in articles_df.columns:
     st.markdown('<div class="section-header">📦 Set Performance — Volume vs Revenue</div>', unsafe_allow_html=True)
 
     set_stats = (

@@ -240,10 +240,17 @@ def load_orders_data() -> pd.DataFrame:
     df = read_flexible_table(candidates[0])
 
     date_col = pick_column(df.columns, ["date_of_purchase", "purchase_date", "date", "order_date"])
-    gross_col = pick_column(df.columns, ["total_value", "gross", "total", "order_total"])
+    gross_col = pick_column(
+        df.columns,
+        ["merchandise_value", "total_value", "gross", "total", "order_total"],
+    )
     commission_col = pick_column(df.columns, ["commission", "fees", "fee"])
-    shipping_col = pick_column(df.columns, ["shipment_costs", "shipping_costs", "shipping", "postage"])
+    shipping_col = pick_column(
+        df.columns,
+        ["shipment_costs", "shipping_costs", "shipping", "postage", "shipment"],
+    )
     country_col = pick_column(df.columns, ["country", "buyer_country", "destination_country"])
+    total_value_col = pick_column(df.columns, ["total_value", "order_total", "total"])
 
     if not date_col or not gross_col:
         return pd.DataFrame()
@@ -255,6 +262,10 @@ def load_orders_data() -> pd.DataFrame:
     out["shipping_cost"] = clean_numeric(df[shipping_col]) if shipping_col else 0.0
     out["country"] = df[country_col].astype(str) if country_col else "Unknown"
     out["net_value"] = out["gross_value"].fillna(0) - out["commission"].fillna(0)
+    if total_value_col and gross_col != total_value_col:
+        out["order_total"] = clean_numeric(df[total_value_col])
+    else:
+        out["order_total"] = out["gross_value"].fillna(0) + out["shipping_cost"].fillna(0)
     out = out.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
     out["month"] = out["date"].dt.to_period("M").dt.to_timestamp()
     return out
