@@ -1,32 +1,23 @@
 import streamlit as st
 
-# Set page configuration (must be first Streamlit command)
-st.set_page_config(
-    page_title="CardMarket BI Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
+st.set_page_config(page_title="ArcadiaReserve BI Suite", page_icon="📊", layout="wide")
+
+with st.sidebar:
+    st.title("ArcadiaReserve BI")
+    st.caption("Herbouwde dashboard-suite")
+
+st.title("📊 ArcadiaReserve BI Suite")
+st.markdown(
+    """
+Welkom in de nieuwe versie van het dashboard.
+
+Gebruik de navigatie links om naar:
+- **Orders Overview** voor omzet en orders
+- **Analytics** voor trends en uitsplitsingen
+- **Costs** voor expense-inzicht
+- **Sold Articles** voor kaartverkoop
+- **Settings** voor datadiagnostics
+"""
 )
 
-# Sidebar branding
-with st.sidebar:
-    st.title("📊 CardMarket BI")
-    st.markdown("---")
-    st.markdown("### About")
-    st.markdown("Dashboard for tracking CardMarket sales and performance.")
-
-# Home page content
-st.title("🏠 Welcome to CardMarket BI Dashboard")
-
-st.markdown("""
-### Getting Started
-Use the sidebar navigation to explore different sections:
-
-- **📊 Orders Overview** - View all your orders and track cumulative revenue
-- **📈 Analytics** - Deep dive into your sales data (coming soon)
-- **⚙️ Settings** - Configure dashboard preferences (coming soon)
-
----
-
-### Quick Stats
-Navigate to the Orders Overview page to see your complete sales dashboard!
-""")
+st.info("Plaats je exports in `data/orders`, `data/articles` en `data/expenses`.")
