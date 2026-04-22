@@ -24,7 +24,11 @@ ORDERS_FILENAME = "cardmarket_orders_data.csv"
 ARTICLES_FILENAME = "cardmarket_articles_sold.csv"
 EXPENSES_FILENAME = "Expenses.ods"
 
-# Local paths
+# Local paths (support both root `data/` and placeholder subfolders)
+ORDERS_DIR = DATA_DIR / "orders"
+ARTICLES_DIR = DATA_DIR / "articles"
+EXPENSES_DIR = DATA_DIR / "expenses"
+
 ORDERS_LOCAL_PATH = DATA_DIR / ORDERS_FILENAME
 ARTICLES_LOCAL_PATH = DATA_DIR / ARTICLES_FILENAME
 EXPENSES_LOCAL_PATH = DATA_DIR / EXPENSES_FILENAME
@@ -54,21 +58,66 @@ def _resolve_source(local_path: Path, s3_url: str) -> str:
     return str(local_path)
 
 
-def _validate_local_file(path: Path, label: str) -> bool:
-    if path.exists():
-        return True
-    st.error(f"Missing local {label} file: {path}")
-    st.info("Add your exports to the data/ folder or switch DATA_SOURCE=s3.")
-    return False
+def _find_local_file(
+    label: str,
+    preferred_path: Path,
+    preferred_subdir: Path,
+    known_filenames: list[str],
+    keyword_patterns: list[str],
+    allowed_extensions: tuple[str, ...] = (".csv",),
+) -> Path | None:
+    """Find a local file in common export locations and names."""
+    candidates = [preferred_path, preferred_subdir / preferred_path.name]
+    candidates.extend(DATA_DIR / name for name in known_filenames)
+    candidates.extend(preferred_subdir / name for name in known_filenames)
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.suffix.lower() in allowed_extensions:
+            return candidate
+
+    pattern_hits: list[Path] = []
+    for keyword in keyword_patterns:
+        pattern_hits.extend(DATA_DIR.glob(f"*{keyword}*"))
+        pattern_hits.extend(preferred_subdir.glob(f"*{keyword}*"))
+
+    filtered_hits = [
+        p for p in pattern_hits if p.is_file() and p.suffix.lower() in allowed_extensions
+    ]
+    if filtered_hits:
+        return max(filtered_hits, key=lambda p: p.stat().st_mtime)
+
+    st.error(f"Missing local {label} file.")
+    st.info(
+        f"Place a matching file in `{DATA_DIR}` or `{preferred_subdir}` "
+        f"(extensions: {', '.join(allowed_extensions)}), or switch DATA_SOURCE=s3."
+    )
+    return None
 
 
 @st.cache_data(ttl=3600)
 def load_orders_data():
     """Load orders data from configured source."""
-    source = _resolve_source(ORDERS_LOCAL_PATH, ORDERS_S3_URL)
+    source = ORDERS_S3_URL
+    local_path = ORDERS_LOCAL_PATH
 
-    if DATA_SOURCE != "s3" and not _validate_local_file(ORDERS_LOCAL_PATH, "orders"):
-        return None
+    if DATA_SOURCE != "s3":
+        resolved = _find_local_file(
+            label="orders",
+            preferred_path=ORDERS_LOCAL_PATH,
+            preferred_subdir=ORDERS_DIR,
+            known_filenames=[
+                ORDERS_FILENAME,
+                "PurchaseData.csv",
+                "Orders.csv",
+                "order_exports.csv",
+            ],
+            keyword_patterns=["purchase", "order", "orders", "buying"],
+            allowed_extensions=(".csv",),
+        )
+        if resolved is None:
+            return None
+        local_path = resolved
+        source = str(local_path)
 
     try:
         df = pd.read_csv(source)
@@ -90,10 +139,27 @@ def load_orders_data():
 @st.cache_data(ttl=3600)
 def load_articles_data():
     """Load sold articles data from configured source."""
-    source = _resolve_source(ARTICLES_LOCAL_PATH, ARTICLES_S3_URL)
+    source = ARTICLES_S3_URL
+    local_path = ARTICLES_LOCAL_PATH
 
-    if DATA_SOURCE != "s3" and not _validate_local_file(ARTICLES_LOCAL_PATH, "articles"):
-        return None
+    if DATA_SOURCE != "s3":
+        resolved = _find_local_file(
+            label="articles",
+            preferred_path=ARTICLES_LOCAL_PATH,
+            preferred_subdir=ARTICLES_DIR,
+            known_filenames=[
+                ARTICLES_FILENAME,
+                "SalesData.csv",
+                "SoldArticles.csv",
+                "sold_articles.csv",
+            ],
+            keyword_patterns=["sold", "sales", "selling", "article"],
+            allowed_extensions=(".csv",),
+        )
+        if resolved is None:
+            return None
+        local_path = resolved
+        source = str(local_path)
 
     try:
         df = pd.read_csv(source)
@@ -111,13 +177,36 @@ def load_articles_data():
 @st.cache_data(ttl=3600)
 def load_expenses_data():
     """Load monthly expenses data from configured source."""
-    source = _resolve_source(EXPENSES_LOCAL_PATH, EXPENSES_S3_URL)
+    source = EXPENSES_S3_URL
+    local_path = EXPENSES_LOCAL_PATH
 
-    if DATA_SOURCE != "s3" and not _validate_local_file(EXPENSES_LOCAL_PATH, "expenses"):
-        return None
+    if DATA_SOURCE != "s3":
+        resolved = _find_local_file(
+            label="expenses",
+            preferred_path=EXPENSES_LOCAL_PATH,
+            preferred_subdir=EXPENSES_DIR,
+            known_filenames=[
+                "Expenses.ods",
+                "Expenses.xlsx",
+                "Expenses.xls",
+                "Expenses.csv",
+            ],
+            keyword_patterns=["expense", "expenses", "cost"],
+            allowed_extensions=(".ods", ".xlsx", ".xls", ".csv"),
+        )
+        if resolved is None:
+            return None
+        local_path = resolved
+        source = str(local_path)
 
     try:
-        df = pd.read_excel(source, engine="odf")
+        suffix = local_path.suffix.lower() if DATA_SOURCE != "s3" else Path(source).suffix.lower()
+        if suffix == ".csv":
+            df = pd.read_csv(source)
+        elif suffix == ".ods":
+            df = pd.read_excel(source, engine="odf")
+        else:
+            df = pd.read_excel(source)
         df["Order_Date"] = pd.to_datetime(df["Order_Date"], dayfirst=True)
 
         if "Item_Price" in df.columns:
