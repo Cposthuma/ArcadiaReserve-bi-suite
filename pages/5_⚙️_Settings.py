@@ -1,62 +1,27 @@
 import streamlit as st
+
 from data_loader import get_data_diagnostics, refresh_data, render_data_reload_button
 
-st.set_page_config(
-    page_title="Settings",
-    layout="wide"
-)
-render_data_reload_button(key="reload_settings_sidebar")
+st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
+render_data_reload_button(key="reload_settings")
 
 st.title("⚙️ Settings")
 
-st.markdown("### Data Management")
-
-st.write(
-    "Current data source: **Local files**. "
-    "Data is cached for 1 hour to improve performance."
-)
-
-if st.button("🔄 Refresh Data", key="refresh_data_settings_main"):
+if st.button("Cache legen en herladen", use_container_width=True):
     refresh_data()
+    st.success("Cache geleegd.")
 
-st.markdown("---")
+st.subheader("Data diagnostics")
+d = get_data_diagnostics()
 
-
-diagnostics = get_data_diagnostics()
-
-st.markdown("### Local Data Diagnostics")
 st.code(
-    f"DATA_DIR env: {diagnostics['data_dir_env']}\n"
-    f"Resolved data dir: {diagnostics['data_dir']}\n"
-    f"Data dir exists: {diagnostics['data_dir_exists']}\n"
-    f"Orders dir: {diagnostics['orders_dir']}\n"
-    f"Articles dir: {diagnostics['articles_dir']}\n"
-    f"Expenses dir: {diagnostics['expenses_dir']}"
+    f"DATA_DIR env: {d['data_dir_env']}\n"
+    f"Resolved dir: {d['data_dir']}\n"
+    f"Exists: {d['exists']}"
 )
 
-if diagnostics["files"]:
-    st.write("Detected local files:")
-    st.code("\n".join(diagnostics["files"]))
+if d["files"]:
+    st.write("Gevonden bestanden:")
+    st.code("\n".join(d["files"]))
 else:
-    st.warning("No local data files gevonden in de data folder.")
-
-
-st.markdown("### Planned Settings")
-st.markdown("""
-- Currency preferences
-- Date format
-- Export options
-- Display preferences
-- Notification settings
-""")
-
-st.markdown("---")
-
-st.markdown("### About This Dashboard")
-st.info(
-    f"""
-**Data Source:** Local files  
-**Update Frequency:** Manual (monthly)  
-**Privacy:** Sensitive data (usernames, order IDs) removed before display
-"""
-)
+    st.info("Geen data-bestanden gevonden.")
