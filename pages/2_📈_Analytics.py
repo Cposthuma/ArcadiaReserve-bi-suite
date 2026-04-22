@@ -103,7 +103,7 @@ orders_df   = load_orders_data()
 articles_df = load_articles_data()
 
 if orders_df is None or articles_df is None:
-    st.error("Could not load data. Please check your S3 bucket configuration.")
+    st.error("Could not load data. Controleer of de CSV-bestanden lokaal in de data map staan.")
     st.stop()
 
 # ── Prep ──────────────────────────────────────────────────────────────────────
