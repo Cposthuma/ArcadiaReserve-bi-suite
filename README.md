@@ -74,3 +74,14 @@ docker push <dockerhub-user>/arcadia-bi-suite:latest
 ```
 
 Daarna kan je dezelfde image overal deployen.
+
+
+## Troubleshooting lokale data
+
+Als je meldingen krijgt dat bestanden ontbreken:
+
+- Controleer in **Settings → Local Data Diagnostics** welke map effectief gebruikt wordt (`Resolved data dir`).
+- De app draait **alleen lokaal** en haalt **geen data uit S3**.
+- Plaats exports in `data/` of in submappen `data/orders`, `data/articles`, `data/expenses`.
+- Klik op **Reload data** in de sidebar om de cache te verversen.
+
