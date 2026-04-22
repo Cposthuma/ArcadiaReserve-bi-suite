@@ -1,0 +1,12 @@
+services:
+  dashboard:
+    build: .
+    container_name: arcadiareserve-bi-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      DATA_SOURCE: local
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
