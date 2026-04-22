@@ -131,6 +131,13 @@ def discover_files(kind: str) -> list[Path]:
 def load_orders_data() -> pd.DataFrame:
     files = discover_files("orders")
     candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS and "expense" not in p.name.lower()]
+    preferred = [
+        p for p in candidates
+        if any(tag in p.name.lower() for tag in ("purchased", "purchase", "order"))
+        and "sold" not in p.name.lower()
+    ]
+    if preferred:
+        candidates = preferred
     if not candidates:
         return pd.DataFrame()
 
@@ -161,6 +168,12 @@ def load_orders_data() -> pd.DataFrame:
 def load_articles_data() -> pd.DataFrame:
     files = discover_files("articles")
     candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS and "expense" not in p.name.lower()]
+    preferred = [
+        p for p in candidates
+        if any(tag in p.name.lower() for tag in ("sold", "article", "card"))
+    ]
+    if preferred:
+        candidates = preferred
     if not candidates:
         return pd.DataFrame()
 
