@@ -6,10 +6,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from data_loader import load_articles_data, load_orders_data
+from data_loader import load_articles_data, load_orders_data, render_data_reload_button
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Orders Overview", page_icon="📊", layout="wide")
+render_data_reload_button(key="reload_orders_overview")
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 BG        = '#f0f8f8'   # very light teal-white — blends with white Streamlit bg

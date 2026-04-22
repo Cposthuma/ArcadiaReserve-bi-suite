@@ -1,12 +1,13 @@
 import os
 
 import streamlit as st
-from data_loader import refresh_data
+from data_loader import refresh_data, render_data_reload_button
 
 st.set_page_config(
     page_title="Settings",
     layout="wide"
 )
+render_data_reload_button(key="reload_settings_sidebar")
 
 st.title("⚙️ Settings")
 
@@ -20,7 +21,7 @@ st.write(
     "Data is cached for 1 hour to improve performance."
 )
 
-if st.button("🔄 Refresh Data"):
+if st.button("🔄 Refresh Data", key="refresh_data_settings_main"):
     refresh_data()
 
 st.markdown("---")

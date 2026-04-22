@@ -58,6 +58,35 @@ def _resolve_source(local_path: Path, s3_url: str) -> str:
     return str(local_path)
 
 
+def _read_csv_flexible(path_or_url: str) -> pd.DataFrame:
+    """Read CSV exports with robust separator + encoding fallbacks."""
+    attempts: list[tuple[str | None, str]] = [
+        (None, "utf-8"),
+        (";", "utf-8"),
+        (",", "utf-8"),
+        (None, "latin-1"),
+        (";", "latin-1"),
+        (",", "latin-1"),
+    ]
+
+    errors: list[str] = []
+    for sep, encoding in attempts:
+        try:
+            if sep is None:
+                df = pd.read_csv(path_or_url, sep=None, engine="python", encoding=encoding)
+            else:
+                df = pd.read_csv(path_or_url, sep=sep, encoding=encoding)
+
+            # a single unnamed mega-column usually means wrong delimiter inference
+            if len(df.columns) == 1 and df.columns[0].startswith("Unnamed"):
+                continue
+            return df
+        except Exception as exc:
+            errors.append(f"sep={sep or 'auto'}, encoding={encoding}: {exc}")
+
+    raise ValueError("Unable to parse CSV. Attempts: " + " | ".join(errors))
+
+
 def _find_local_file(
     label: str,
     preferred_path: Path,
@@ -70,15 +99,27 @@ def _find_local_file(
     candidates = [preferred_path, preferred_subdir / preferred_path.name]
     candidates.extend(DATA_DIR / name for name in known_filenames)
     candidates.extend(preferred_subdir / name for name in known_filenames)
+    known_names_lc = {name.lower() for name in known_filenames}
+    keyword_patterns_lc = [keyword.lower() for keyword in keyword_patterns]
 
     for candidate in candidates:
         if candidate.exists() and candidate.suffix.lower() in allowed_extensions:
             return candidate
 
+    searchable_roots = [DATA_DIR]
+    if preferred_subdir != DATA_DIR:
+        searchable_roots.append(preferred_subdir)
+
     pattern_hits: list[Path] = []
-    for keyword in keyword_patterns:
-        pattern_hits.extend(DATA_DIR.glob(f"*{keyword}*"))
-        pattern_hits.extend(preferred_subdir.glob(f"*{keyword}*"))
+    for root in searchable_roots:
+        for candidate in root.rglob("*"):
+            if not candidate.is_file() or candidate.suffix.lower() not in allowed_extensions:
+                continue
+            candidate_name_lc = candidate.name.lower()
+            if candidate_name_lc in known_names_lc or any(
+                keyword in candidate_name_lc for keyword in keyword_patterns_lc
+            ):
+                pattern_hits.append(candidate)
 
     filtered_hits = [
         p for p in pattern_hits if p.is_file() and p.suffix.lower() in allowed_extensions
@@ -91,6 +132,17 @@ def _find_local_file(
         f"Place a matching file in `{DATA_DIR}` or `{preferred_subdir}` "
         f"(extensions: {', '.join(allowed_extensions)}), or switch DATA_SOURCE=s3."
     )
+    visible_candidates = sorted(
+        p.relative_to(DATA_DIR).as_posix()
+        for p in DATA_DIR.rglob("*")
+        if p.is_file() and p.suffix.lower() in allowed_extensions
+    )
+    if visible_candidates:
+        st.info(
+            "Detected files: "
+            + ", ".join(visible_candidates[:10])
+            + (" …" if len(visible_candidates) > 10 else "")
+        )
     return None
 
 
@@ -120,7 +172,7 @@ def load_orders_data():
         source = str(local_path)
 
     try:
-        df = pd.read_csv(source)
+        df = _read_csv_flexible(source)
         df["Date of Purchase"] = pd.to_datetime(df["Date of Purchase"])
 
         for col in ["Merchandise Value", "Shipment Costs", "Total Value", "Commission"]:
@@ -162,7 +214,7 @@ def load_articles_data():
         source = str(local_path)
 
     try:
-        df = pd.read_csv(source)
+        df = _read_csv_flexible(source)
 
         if "card_prices" in df.columns:
             df["card_prices"] = _clean_numeric(df["card_prices"])
@@ -224,3 +276,11 @@ def refresh_data():
     """Clear cache to force data refresh."""
     st.cache_data.clear()
     st.success("Data cache cleared! Reload the page to fetch fresh data.")
+
+
+def render_data_reload_button(*, key: str = "data_reload_sidebar") -> None:
+    """Render a sidebar button to clear cache and reload current page."""
+    with st.sidebar:
+        if st.button("🔄 Reload data", key=key, use_container_width=True):
+            refresh_data()
+            st.rerun()

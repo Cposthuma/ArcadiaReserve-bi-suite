@@ -7,10 +7,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from data_loader import load_expenses_data
+from data_loader import load_expenses_data, render_data_reload_button
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Costs", page_icon="💸", layout="wide")
+render_data_reload_button(key="reload_costs")
 
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
