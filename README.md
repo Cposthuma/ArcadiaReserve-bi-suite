@@ -12,11 +12,11 @@ Dit project visualiseert CardMarket orders, sold articles en kosten in een Strea
 
 ## Lokale data (standaard)
 
-Plaats je databestanden in `./data`:
+Plaats je databestanden in `./data` (of in de submappen hieronder):
 
-- `cardmarket_orders_data.csv`
-- `cardmarket_articles_sold.csv`
-- `Expenses.ods`
+- `data/orders/` → orders / PurchaseData exports (`.csv`)
+- `data/articles/` → sold articles / SalesData exports (`.csv`)
+- `data/expenses/` → expenses (`.csv`, `.xlsx`, `.xls`, `.ods`)
 
 Zie ook: `data/README.md`.
 
