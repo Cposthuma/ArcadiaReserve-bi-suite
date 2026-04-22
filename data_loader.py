@@ -1,19 +1,53 @@
-"""Local data loader for CardMarket Dashboard."""
+"""Local-only data loader for CardMarket Dashboard."""
 import os
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# Local data configuration
-DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
+# Local-only data configuration
+DATA_DIR_ENV = os.getenv("DATA_DIR")
 
 # Expected filenames
 ORDERS_FILENAME = "cardmarket_orders_data.csv"
 ARTICLES_FILENAME = "cardmarket_articles_sold.csv"
 EXPENSES_FILENAME = "Expenses.ods"
 
-# Local paths (support both root `data/` and placeholder subfolders)
+
+def _resolve_data_dir() -> Path:
+    """Resolve DATA_DIR robustly across local and Docker runs."""
+    module_root = Path(__file__).resolve().parent
+
+    if DATA_DIR_ENV:
+        configured = Path(DATA_DIR_ENV).expanduser()
+        if configured.is_absolute():
+            return configured
+
+        # Relative DATA_DIR should work regardless of current working directory.
+        candidates = [
+            Path.cwd() / configured,
+            module_root / configured,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+        return candidates[0].resolve()
+
+    # No env var: prefer local repository data/ folder.
+    default_candidates = [
+        Path.cwd() / "data",
+        module_root / "data",
+    ]
+    for candidate in default_candidates:
+        if candidate.exists():
+            return candidate.resolve()
+
+    return default_candidates[0].resolve()
+
+
+DATA_DIR = _resolve_data_dir()
+
+# Local paths (support both root `data/` and subfolders)
 ORDERS_DIR = DATA_DIR / "orders"
 ARTICLES_DIR = DATA_DIR / "articles"
 EXPENSES_DIR = DATA_DIR / "expenses"
@@ -55,7 +89,7 @@ def _read_csv_flexible(path_or_url: str) -> pd.DataFrame:
             else:
                 df = pd.read_csv(path_or_url, sep=sep, encoding=encoding)
 
-            # a single unnamed mega-column usually means wrong delimiter inference
+            # A single unnamed mega-column usually means wrong delimiter inference.
             if len(df.columns) == 1 and df.columns[0].startswith("Unnamed"):
                 continue
             return df
@@ -63,6 +97,18 @@ def _read_csv_flexible(path_or_url: str) -> pd.DataFrame:
             errors.append(f"sep={sep or 'auto'}, encoding={encoding}: {exc}")
 
     raise ValueError("Unable to parse CSV. Attempts: " + " | ".join(errors))
+
+
+def _iter_files(root: Path, allowed_extensions: tuple[str, ...]) -> list[Path]:
+    """Safely collect files under root with allowed extensions."""
+    if not root.exists():
+        return []
+
+    files: list[Path] = []
+    for candidate in root.rglob("*"):
+        if candidate.is_file() and candidate.suffix.lower() in allowed_extensions:
+            files.append(candidate)
+    return files
 
 
 def _find_local_file(
@@ -90,30 +136,26 @@ def _find_local_file(
 
     pattern_hits: list[Path] = []
     for root in searchable_roots:
-        for candidate in root.rglob("*"):
-            if not candidate.is_file() or candidate.suffix.lower() not in allowed_extensions:
-                continue
+        for candidate in _iter_files(root, allowed_extensions):
             candidate_name_lc = candidate.name.lower()
             if candidate_name_lc in known_names_lc or any(
                 keyword in candidate_name_lc for keyword in keyword_patterns_lc
             ):
                 pattern_hits.append(candidate)
 
-    filtered_hits = [
-        p for p in pattern_hits if p.is_file() and p.suffix.lower() in allowed_extensions
-    ]
-    if filtered_hits:
-        return max(filtered_hits, key=lambda p: p.stat().st_mtime)
+    if pattern_hits:
+        return max(pattern_hits, key=lambda p: p.stat().st_mtime)
 
-    st.error(f"Missing local {label} file.")
+    checked_paths = "\n".join(f"- {path}" for path in candidates[:6])
+    st.error(f"Missing local {label} file in: {DATA_DIR}")
     st.info(
-        f"Place a matching file in `{DATA_DIR}` or `{preferred_subdir}` "
-        f"(extensions: {', '.join(allowed_extensions)})."
+        "Deze app leest **alleen lokale bestanden** (geen S3). "
+        "Voeg je export toe in `data/`, `data/orders`, `data/articles` of `data/expenses`."
     )
+    st.code(f"Checked paths:\n{checked_paths}")
+
     visible_candidates = sorted(
-        p.relative_to(DATA_DIR).as_posix()
-        for p in DATA_DIR.rglob("*")
-        if p.is_file() and p.suffix.lower() in allowed_extensions
+        p.relative_to(DATA_DIR).as_posix() for p in _iter_files(DATA_DIR, allowed_extensions)
     )
     if visible_candidates:
         st.info(
@@ -122,6 +164,22 @@ def _find_local_file(
             + (" …" if len(visible_candidates) > 10 else "")
         )
     return None
+
+
+def get_data_diagnostics() -> dict[str, object]:
+    """Return runtime diagnostics for local file loading."""
+    all_local_files = [
+        p.relative_to(DATA_DIR).as_posix() for p in _iter_files(DATA_DIR, (".csv", ".ods", ".xlsx", ".xls"))
+    ]
+    return {
+        "data_dir": str(DATA_DIR),
+        "data_dir_env": DATA_DIR_ENV,
+        "data_dir_exists": DATA_DIR.exists(),
+        "orders_dir": str(ORDERS_DIR),
+        "articles_dir": str(ARTICLES_DIR),
+        "expenses_dir": str(EXPENSES_DIR),
+        "files": sorted(all_local_files),
+    }
 
 
 @st.cache_data(ttl=3600)
