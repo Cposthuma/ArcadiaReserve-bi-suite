@@ -198,20 +198,22 @@ def _articles_from_orders_export(df: pd.DataFrame) -> pd.DataFrame:
 def discover_files(kind: str) -> list[Path]:
     root = DATA_DIR
     scoped = root / kind
-    files: list[Path] = []
-    if scoped.exists():
-        files.extend(iter_files(scoped, TABULAR_EXTENSIONS))
-    files.extend(iter_files(root, TABULAR_EXTENSIONS))
 
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique: list[Path] = []
-    for item in files:
-        key = str(item.resolve())
-        if key not in seen:
-            unique.append(item)
-            seen.add(key)
-    return unique
+    # Prefer strict folder scoping to avoid mixing sales/purchases data.
+    scoped_files = iter_files(scoped, TABULAR_EXTENSIONS) if scoped.exists() else []
+    if scoped_files:
+        return scoped_files
+
+    # Backwards-compatible fallback: scan root and try to infer by filename.
+    all_files = iter_files(root, TABULAR_EXTENSIONS)
+    kind_tokens = {
+        "orders": ("sold", "order"),
+        "articles": ("article", "sold", "card"),
+        "expenses": ("expense", "cost", "purchased"),
+    }
+    tokens = kind_tokens.get(kind, ())
+    filtered = [p for p in all_files if any(token in p.as_posix().lower() for token in tokens)]
+    return filtered or all_files
 
 
 # -----------------------------
@@ -220,11 +222,15 @@ def discover_files(kind: str) -> list[Path]:
 @st.cache_data(ttl=3600)
 def load_orders_data() -> pd.DataFrame:
     files = discover_files("orders")
-    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS and "expense" not in p.name.lower()]
+    candidates = [
+        p for p in files
+        if p.suffix.lower() in CSV_EXTENSIONS
+        and "expense" not in p.name.lower()
+        and "purchased" not in p.name.lower()
+    ]
     preferred = [
         p for p in candidates
-        if any(tag in p.name.lower() for tag in ("purchased", "purchase", "order"))
-        and "sold" not in p.name.lower()
+        if any(tag in p.name.lower() for tag in ("sold", "sale", "order"))
     ]
     if preferred:
         candidates = preferred
@@ -290,6 +296,12 @@ def load_articles_data() -> pd.DataFrame:
 @st.cache_data(ttl=3600)
 def load_expenses_data() -> pd.DataFrame:
     files = discover_files("expenses")
+    preferred = [
+        p for p in files
+        if any(tag in p.name.lower() for tag in ("expense", "cost", "purchased"))
+    ]
+    if preferred:
+        files = preferred
     if not files:
         return pd.DataFrame()
 
