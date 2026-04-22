@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Iterable
 
@@ -105,6 +106,95 @@ def read_flexible_table(path: Path) -> pd.DataFrame:
     return pd.read_excel(path)
 
 
+RARITY_LABELS = {
+    "common",
+    "uncommon",
+    "rare",
+    "mythic",
+    "mythic rare",
+    "promo",
+    "double rare",
+    "illustration rare",
+    "ultra rare",
+    "special illustration rare",
+    "holo rare",
+    "shiny rare",
+    "leader",
+    "land",
+}
+
+
+def _parse_article_description(description: str) -> list[dict[str, object]]:
+    """Parse marketplace description into normalized sold-article rows."""
+    if not isinstance(description, str) or not description.strip():
+        return []
+
+    rows: list[dict[str, object]] = []
+    for raw_item in re.split(r"\s+\|\s+", description.strip()):
+        item = raw_item.strip()
+        if not item:
+            continue
+
+        qty_match = re.match(r"^(\d+)x\s+", item)
+        quantity = int(qty_match.group(1)) if qty_match else 1
+        details = item[qty_match.end():].strip() if qty_match else item
+
+        # Price appears at the end in format "0,95 EUR"
+        price_match = re.search(r"(\d+[\.,]\d+)\s*EUR\s*$", details)
+        if price_match:
+            unit_price = float(price_match.group(1).replace(",", "."))
+            details = details[:price_match.start()].rstrip(" -")
+        else:
+            unit_price = float("nan")
+
+        parts = [p.strip() for p in details.split(" - ") if p.strip()]
+        title = parts[0] if parts else details
+
+        set_name = "Unknown"
+        title_match = re.match(r"^(.*?)\s*\(([^()]+)\)\s*$", title)
+        if title_match:
+            name = title_match.group(1).strip()
+            set_name = title_match.group(2).strip()
+        else:
+            name = title.strip()
+
+        rarity = "Unknown"
+        for token in parts[1:]:
+            if token.lower() in RARITY_LABELS:
+                rarity = token
+                break
+
+        for _ in range(max(quantity, 1)):
+            rows.append({
+                "price": unit_price,
+                "name": name or "Unknown",
+                "set_name": set_name,
+                "rarity": rarity,
+            })
+    return rows
+
+
+def _articles_from_orders_export(df: pd.DataFrame) -> pd.DataFrame:
+    description_col = pick_column(df.columns, ["description", "product_description", "items"])
+    sold_date_col = pick_column(df.columns, ["date_of_purchase", "purchase_date", "date", "order_date"])
+    if not description_col:
+        return pd.DataFrame()
+
+    parsed_rows: list[dict[str, object]] = []
+    for _, row in df.iterrows():
+        sold_date = pd.to_datetime(row[sold_date_col], errors="coerce", dayfirst=True) if sold_date_col else pd.NaT
+        for parsed in _parse_article_description(row.get(description_col, "")):
+            parsed["sold_date"] = sold_date
+            parsed_rows.append(parsed)
+
+    if not parsed_rows:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(parsed_rows)
+    out["price"] = pd.to_numeric(out["price"], errors="coerce")
+    return out.dropna(subset=["price"]).reset_index(drop=True)
+
+
 def discover_files(kind: str) -> list[Path]:
     root = DATA_DIR
     scoped = root / kind
@@ -185,7 +275,7 @@ def load_articles_data() -> pd.DataFrame:
     sold_date_col = pick_column(df.columns, ["sold_date", "date", "sale_date"])
 
     if not price_col:
-        return pd.DataFrame()
+        return _articles_from_orders_export(df)
 
     out = pd.DataFrame()
     out["price"] = clean_numeric(df[price_col])
