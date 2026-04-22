@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from data_loader import load_articles_data
+from data_loader import load_articles_data, render_data_reload_button
 
 # Set page configuration
 st.set_page_config(
     page_title="Sold Articles Overview",
     layout="wide"
 )
+render_data_reload_button(key="reload_sold_articles")
 
 st.title("🎴 Sold Articles Overview")
 

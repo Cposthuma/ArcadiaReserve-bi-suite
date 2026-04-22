@@ -7,10 +7,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from data_loader import load_orders_data, load_articles_data
+from data_loader import load_orders_data, load_articles_data, render_data_reload_button
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
+render_data_reload_button(key="reload_analytics")
 
 # ── Palette — light mode ──────────────────────────────────────────────────────
 BG      = '#f4f7ee'   # warm off-white with a green tint
