@@ -15,8 +15,12 @@ st.title("🎴 Sold Articles Overview")
 # Load local data
 df = load_articles_data()
 
-if df is None:
+required_columns = {"price", "set_name", "rarity"}
+
+if df is None or df.empty or not required_columns.issubset(df.columns):
     st.error("Could not load articles data. Controleer of de CSV lokaal in de data map staat.")
+    if df is not None and not df.empty:
+        st.caption(f"Ontbrekende kolommen: {', '.join(sorted(required_columns - set(df.columns)))}")
     st.stop()
 
 # Display the dataframe
