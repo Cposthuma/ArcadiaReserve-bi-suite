@@ -35,6 +35,7 @@ def resolve_data_dir() -> Path:
             return candidate.resolve()
     return (Path.cwd() / "data").resolve()
 
+DATA_DIR = resolve_data_dir()
 
 DATA_DIR = resolve_data_dir()
 
@@ -124,58 +125,17 @@ def discover_files(kind: str) -> list[Path]:
     return unique
 
 
-def pick_best_file(files: list[Path], kind: str) -> Path | None:
-    """Pick the most likely file for a given domain based on filename signals."""
-    if not files:
-        return None
-
-    kind_signals: dict[str, list[str]] = {
-        "orders": [
-            "sold orders",
-            "orders-bypurchasedate",
-            "purchase",
-            "order",
-            "sold",
-        ],
-        "articles": [
-            "sold articles",
-            "salesdata",
-            "article",
-            "sales",
-            "cards",
-        ],
-        "expenses": [
-            "expenses",
-            "expense",
-            "cost",
-        ],
-    }
-
-    signals = kind_signals.get(kind, [])
-    scored: list[tuple[int, Path]] = []
-    for file in files:
-        name = file.name.lower()
-        score = sum(2 for signal in signals if signal in name)
-        if kind != "expenses" and any(x in name for x in ("expense", "cost")):
-            score -= 3
-        scored.append((score, file))
-
-    scored.sort(key=lambda x: (x[0], x[1].stat().st_mtime), reverse=True)
-    return scored[0][1]
-
-
 # -----------------------------
 # Domain loaders
 # -----------------------------
 @st.cache_data(ttl=3600)
 def load_orders_data() -> pd.DataFrame:
     files = discover_files("orders")
-    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS]
-    selected = pick_best_file(candidates, "orders")
-    if not selected:
+    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS and "expense" not in p.name.lower()]
+    if not candidates:
         return pd.DataFrame()
 
-    df = read_flexible_table(selected)
+    df = read_flexible_table(candidates[0])
 
     date_col = pick_column(df.columns, ["date_of_purchase", "purchase_date", "date", "order_date"])
     gross_col = pick_column(df.columns, ["total_value", "gross", "total", "order_total"])
@@ -198,15 +158,17 @@ def load_orders_data() -> pd.DataFrame:
     return out
 
 
+# -----------------------------
+# Domain loaders
+# -----------------------------
 @st.cache_data(ttl=3600)
 def load_articles_data() -> pd.DataFrame:
     files = discover_files("articles")
-    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS]
-    selected = pick_best_file(candidates, "articles")
-    if not selected:
+    candidates = [p for p in files if p.suffix.lower() in CSV_EXTENSIONS and "expense" not in p.name.lower()]
+    if not candidates:
         return pd.DataFrame()
 
-    df = read_flexible_table(selected)
+    df = read_flexible_table(candidates[0])
     price_col = pick_column(df.columns, ["card_prices", "price", "sold_price", "value"])
     name_col = pick_column(df.columns, ["name", "card_name", "article", "product"])
     set_col = pick_column(df.columns, ["set_names", "set_name", "set"])
@@ -229,11 +191,10 @@ def load_articles_data() -> pd.DataFrame:
 @st.cache_data(ttl=3600)
 def load_expenses_data() -> pd.DataFrame:
     files = discover_files("expenses")
-    selected = pick_best_file(files, "expenses")
-    if not selected:
+    if not files:
         return pd.DataFrame()
 
-    df = read_flexible_table(selected)
+    df = read_flexible_table(files[0])
     date_col = pick_column(df.columns, ["order_date", "date", "purchase_date"])
     price_col = pick_column(df.columns, ["item_price", "price", "amount", "cost"])
     category_col = pick_column(df.columns, ["cost_category", "category", "expense_type"])

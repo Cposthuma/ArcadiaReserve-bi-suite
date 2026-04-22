@@ -27,9 +27,6 @@ Plaats exports in:
 
 Bestanden in `data/` root worden ook gelezen.
 
-Ondersteunde order-exportnamen bevatten o.a. patronen zoals:
-- `Sold Orders-byPurchaseDate-YYYY-MM-DD_YYYY-MM-DD.csv`
-
 ## Lokaal runnen
 
 ```bash
