@@ -101,8 +101,12 @@ M = dict(l=0, r=0, t=10, b=0)
 orders_df   = load_orders_data()
 articles_df = load_articles_data()
 
-if orders_df is None or articles_df is None:
-    st.error("Could not load data. Controleer of de CSV-bestanden lokaal in de data map staan.")
+if orders_df is None or orders_df.empty:
+    st.error("Could not load orders data.")
+    st.stop()
+
+if articles_df is None or articles_df.empty:
+    st.error("Could not load articles data.")
     st.stop()
 
 # ── Prep ──────────────────────────────────────────────────────────────────────
