@@ -1,0 +1,12 @@
+services:
+  dashboard:
+    build: .
+    container_name: arcadia-bi-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      DATA_SOURCE: local
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data:ro
+    restart: unless-stopped

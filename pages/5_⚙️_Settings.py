@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 from data_loader import refresh_data
 
@@ -10,7 +12,13 @@ st.title("⚙️ Settings")
 
 st.markdown("### Data Management")
 
-st.write("The dashboard loads data from AWS S3. Data is cached for 1 hour to improve performance.")
+source = os.getenv("DATA_SOURCE", "local")
+source_label = "Local files" if source.lower() != "s3" else "AWS S3"
+
+st.write(
+    f"Current data source: **{source_label}**. "
+    "Data is cached for 1 hour to improve performance."
+)
 
 if st.button("🔄 Refresh Data"):
     refresh_data()
@@ -29,8 +37,10 @@ st.markdown("""
 st.markdown("---")
 
 st.markdown("### About This Dashboard")
-st.info("""
-**Data Source:** AWS S3 (Frankfurt)  
+st.info(
+    f"""
+**Data Source:** {source_label}  
 **Update Frequency:** Manual (monthly)  
 **Privacy:** Sensitive data (usernames, order IDs) removed before display
-""")
+"""
+)
