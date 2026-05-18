@@ -32,11 +32,11 @@ with col1:
     st.metric("Total Articles Sold", total_articles_sold)
 
 with col2:
-    total_revenue = df['card_prices'].sum()
+    total_revenue = df['card_price'].sum()
     st.metric("Total Revenue", f"€{total_revenue:.2f}")
 
 with col3:
-    unique_sets = df['set_names'].nunique()
+    unique_sets = df['set_name'].nunique()
     st.metric("Unique Sets", unique_sets)
 
 # Display the number of cards sold per card_rarity
@@ -45,7 +45,7 @@ st.markdown("### Articles Sold by Rarity")
 
 rarity_order = ['Common', 'Uncommon', 'Rare', 'Mythic', 'Land', 'Unknown']
 rarity_counts = (
-    df['card_rarities']
+    df['rarity']
     .value_counts()
     .reindex(rarity_order)
     .dropna()
@@ -66,10 +66,10 @@ st.plotly_chart(fig_rarity, use_container_width=True)
 st.markdown("---")
 st.title("🌳 Cards Sold by Set")
 
-treemap_count = df.groupby('set_names').size().reset_index(name='count')
+treemap_count = df.groupby('set_name').size().reset_index(name='count')
 
 fig1 = go.Figure(go.Treemap(
-    labels=treemap_count['set_names'],
+    labels=treemap_count['set_name'],
     parents=[''] * len(treemap_count),
     values=treemap_count['count'],
     marker=dict(
@@ -100,13 +100,13 @@ st.plotly_chart(fig1, use_container_width=True)
 # =====================================
 
 treemap_value = (
-    df.groupby('set_names')['card_prices']
+    df.groupby('set_name')['card_price']
       .sum()
       .reset_index(name='total_value')
 )
 
 fig2 = go.Figure(go.Treemap(
-    labels=treemap_value['set_names'],
+    labels=treemap_value['set_name'],
     parents=[''] * len(treemap_value),
     values=treemap_value['total_value'],
     marker=dict(

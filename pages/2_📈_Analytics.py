@@ -362,11 +362,11 @@ st.plotly_chart(fig_bucket, use_container_width=True)
 # ══════════════════════════════════════════════════════════════════════════════
 # Section 7 — Rarity Breakdown
 # ══════════════════════════════════════════════════════════════════════════════
-if 'card_rarities' in articles_df.columns:
+if 'rarity' in articles_df.columns:
     st.markdown('<div class="section-header">✨ Rarity Breakdown</div>', unsafe_allow_html=True)
 
     rarity_stats = (
-        articles_df.groupby('card_rarities')
+        articles_df.groupby('rarity')
         .agg(Count=('card_prices', 'count'), Total=('card_prices', 'sum'), Avg=('card_prices', 'mean'))
         .round(2)
         .sort_values('Total', ascending=False).reset_index()
@@ -377,7 +377,7 @@ if 'card_rarities' in articles_df.columns:
     with col_rar1:
         fig_rar_count = px.pie(
             rarity_stats,
-            names='card_rarities', values='Count',
+            names='rarity', values='Count',
             hole=0.5,
             color_discrete_sequence=COUNTRY_PALETTE,
         )
@@ -400,7 +400,7 @@ if 'card_rarities' in articles_df.columns:
     with col_rar2:
         fig_rar_rev = px.pie(
             rarity_stats,
-            names='card_rarities', values='Total',
+            names='rarity', values='Total',
             hole=0.5,
             color_discrete_sequence=COUNTRY_PALETTE,
         )
@@ -426,8 +426,8 @@ if 'card_rarities' in articles_df.columns:
         rarity_sorted = rarity_stats.sort_values('Avg')
         fig_rar_avg = px.bar(
             rarity_sorted,
-            x='card_rarities', y='Avg',
-            labels={'card_rarities': 'Rarity', 'Avg': 'Avg Price (€)'},
+            x='rarity', y='Avg',
+            labels={'rarity': 'Rarity', 'Avg': 'Avg Price (€)'},
             color='Avg',
             color_continuous_scale=GRAD,
         )

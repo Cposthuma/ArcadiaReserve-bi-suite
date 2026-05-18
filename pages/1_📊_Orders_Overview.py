@@ -190,15 +190,15 @@ st.markdown('<div class="section-header">Singles Sold</div>', unsafe_allow_html=
 
 a1, a2, a3, a4 = st.columns(4)
 
-median_price = articles_df['card_prices'].median()
-top_card     = articles_df.loc[articles_df['card_prices'].idxmax()] if not articles_df.empty else None
+median_price = articles_df['card_price'].median()
+top_card     = articles_df.loc[articles_df['card_price'].idxmax()] if not articles_df.empty else None
 
 for col, label, val, sub in [
     (a1, "Singles Sold",     f"{len(articles_df):,}",                       "individual cards"),
-    (a2, "Articles Revenue", f"€{articles_df['card_prices'].sum():,.2f}",   "total card value"),
-    (a3, "Avg Card Price",   f"€{articles_df['card_prices'].mean():,.2f}",  f"median €{median_price:.2f}"),
+    (a2, "Articles Revenue", f"€{articles_df['card_price'].sum():,.2f}",   "total card value"),
+    (a3, "Avg Card Price",   f"€{articles_df['card_price'].mean():,.2f}",  f"median €{median_price:.2f}"),
     (a4, "Highest Sale",
-         f"€{top_card['card_prices']:.2f}" if top_card is not None else "—",
+         f"€{top_card['card_price']:.2f}" if top_card is not None else "—",
          top_card['name'] if top_card is not None and 'name' in top_card else ""),
 ]:
     col.markdown(f"""
@@ -324,9 +324,9 @@ col_x, col_y = st.columns([2, 3])
 with col_x:
     fig_hist = px.histogram(
         articles_df,
-        x='card_prices',
+        x='card_price',
         nbins=30,
-        labels={'card_prices': 'Card Price (€)', 'count': 'Count'},
+        labels={'card_price': 'Card Price (€)', 'count': 'Count'},
         color_discrete_sequence=[ACCENT],
     )
     fig_hist.update_traces(hovertemplate='€%{x:.2f}<br>%{y} cards<extra></extra>')
@@ -342,7 +342,7 @@ with col_x:
 with col_y:
     bins   = [0, 0.5, 1, 2, 5, 10, 25, 50, float('inf')]
     labels = ['<€0.50', '€0.50–1', '€1–2', '€2–5', '€5–10', '€10–25', '€25–50', '€50+']
-    articles_df['Price Bucket'] = pd.cut(articles_df['card_prices'], bins=bins, labels=labels)
+    articles_df['Price Bucket'] = pd.cut(articles_df['card_price'], bins=bins, labels=labels)
     bucket_counts = articles_df['Price Bucket'].value_counts().reindex(labels).reset_index()
     bucket_counts.columns = ['Bucket', 'Count']
 
