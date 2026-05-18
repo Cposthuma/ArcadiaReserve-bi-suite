@@ -142,7 +142,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Login gate ────────────────────────────────────────────────────────────────
-CORRECT_PASSWORD = "vaultborn"
+CORRECT_PASSWORD = "test"
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
