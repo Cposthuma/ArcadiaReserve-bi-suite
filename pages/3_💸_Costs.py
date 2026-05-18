@@ -15,73 +15,129 @@ st.set_page_config(page_title="Costs", page_icon="💸", layout="wide")
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;700&display=swap');
 
   html, body, [class*="css"] {
     font-family: 'DM Sans', sans-serif;
+    background-color: #faf7f5;
+    color: #3b2323;
   }
 
-  /* Dark card tiles */
-  .metric-card {
-    background: #1a1a2e;
-    border: 1px solid #2a2a4a;
-    border-radius: 12px;
-    padding: 20px 24px;
-    text-align: center;
+  /* Main app background */
+  .stApp {
+    background-color: #faf7f5;
   }
+
+  /* Sidebar */
+  section[data-testid="stSidebar"] {
+    background: #f4ece8;
+    border-right: 1px solid #ead9d2;
+  }
+
+  /* Metric cards */
+  .metric-card {
+    background: linear-gradient(145deg, #fff8f6, #f8ece8);
+    border: 1px solid #ead9d2;
+    border-radius: 18px;
+    padding: 22px 24px;
+    text-align: center;
+    box-shadow: 0 4px 18px rgba(120, 60, 60, 0.06);
+    transition: all 0.2s ease;
+  }
+
+  .metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(120, 60, 60, 0.10);
+  }
+
   .metric-card .label {
     font-size: 0.72rem;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #7c7caa;
-    margin-bottom: 6px;
+    color: #a06b6b;
+    margin-bottom: 8px;
+    font-weight: 600;
   }
+
   .metric-card .value {
     font-family: 'DM Serif Display', serif;
-    font-size: 2rem;
-    color: #e8e4ff;
+    font-size: 2.1rem;
+    color: #7d2e2e;
     line-height: 1;
   }
+
   .metric-card .sub {
-    font-size: 0.78rem;
-    color: #5c5c8a;
-    margin-top: 4px;
+    font-size: 0.82rem;
+    color: #8b6f6f;
+    margin-top: 6px;
   }
 
-  /* Section header */
+  /* Section headers */
   .section-header {
     font-family: 'DM Serif Display', serif;
-    font-size: 1.25rem;
-    color: #e8e4ff;
-    margin: 8px 0 16px 0;
-    border-left: 3px solid #7b5ea7;
-    padding-left: 12px;
+    font-size: 1.4rem;
+    color: #8f2d2d;
+    margin: 10px 0 18px 0;
+    border-left: 4px solid #c97c7c;
+    padding-left: 14px;
+    line-height: 1;
   }
 
-  /* Login form styling */
+  /* Login form */
   .login-wrapper {
     max-width: 380px;
     margin: 80px auto 0 auto;
-    background: #1a1a2e;
-    border: 1px solid #2a2a4a;
-    border-radius: 16px;
+    background: #fff8f6;
+    border: 1px solid #ead9d2;
+    border-radius: 20px;
     padding: 40px 36px;
     text-align: center;
+    box-shadow: 0 10px 35px rgba(120, 60, 60, 0.08);
   }
+
   .login-title {
     font-family: 'DM Serif Display', serif;
-    font-size: 1.8rem;
-    color: #e8e4ff;
-    margin-bottom: 4px;
+    font-size: 2rem;
+    color: #7d2e2e;
+    margin-bottom: 6px;
   }
+
   .login-sub {
-    font-size: 0.85rem;
-    color: #7c7caa;
+    font-size: 0.9rem;
+    color: #8f7a7a;
     margin-bottom: 28px;
   }
 
+  /* Buttons */
+  .stButton > button {
+    background: #a94444;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 0.55rem 1rem;
+    font-weight: 500;
+  }
+
+  .stButton > button:hover {
+    background: #922f2f;
+    color: white;
+  }
+
+  /* Multiselects + inputs */
+  div[data-baseweb="select"] > div {
+    background-color: #fff8f6;
+    border-color: #e2cfc7;
+  }
+
+  /* Divider */
+  hr {
+    border-color: #ead9d2 !important;
+  }
+
   /* Hide default streamlit top padding */
-  .block-container { padding-top: 1.5rem !important; }
+  .block-container {
+    padding-top: 1.4rem !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -198,8 +254,26 @@ dff = df[
 
 # ── Page title ────────────────────────────────────────────────────────────────
 st.markdown(
-    "<h1 style='font-family:DM Serif Display,serif; color:#e8e4ff; margin-bottom:4px;'>💸 Cost Overview</h1>"
-    "<p style='color:#7c7caa; font-size:0.9rem; margin-top:0;'>Monthly purchasing expenses across all suppliers</p>",
+    """
+    <h1 style='
+        font-family:DM Serif Display,serif;
+        color:#5e1f1f;
+        margin-bottom:4px;
+        font-size:3rem;
+        letter-spacing:-0.02em;
+    '>
+    💸 Cost Overview
+    </h1>
+
+    <p style='
+        color:#9a7b7b;
+        font-size:0.95rem;
+        margin-top:0;
+        margin-bottom:0;
+    '>
+    Monthly purchasing expenses across all suppliers
+    </p>
+    """,
     unsafe_allow_html=True,
 )
 st.divider()
@@ -247,16 +321,16 @@ with col_left:
         title='Monthly Spend by Category',
     )
     fig_bar.update_layout(
-        paper_bgcolor='#1a1a2e',
-        plot_bgcolor='#1a1a2e',
+        paper_bgcolor='#fffaf8',
+        plot_bgcolor='#fffaf8',
         title=dict(
             text='Monthly Spend by Category',
-            font=dict(family='DM Serif Display', size=16, color='#e8e4ff'),
+            font=dict(family='DM Serif Display', size=16, color='#7d2e2e'),
             x=0.5,
             xanchor='center',
         ),
         legend_title_text='',
-        legend=dict(orientation='h', y=-0.2, font=dict(color='#e8e4ff')),
+        legend=dict(orientation='h', y=-0.2, font=dict(color='#6f4a4a')),
         margin=dict(l=0, r=0, t=50, b=0),
         hovermode='x unified',
         yaxis=dict(tickprefix='€'),
@@ -279,20 +353,20 @@ with col_right:
         hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
     )
     fig_donut.update_layout(
-        paper_bgcolor='#1a1a2e',
-        font_color='#e8e4ff',
+        paper_bgcolor='#fffaf8',
+        font_color='#5b3a3a',
         title=dict(
             text='Spend by Category',
-            font=dict(family='DM Serif Display', size=16, color='#e8e4ff'),
+            font=dict(family='DM Serif Display', size=16, color='#7d2e2e'),
             x=0.5,
             xanchor='center',
         ),
         showlegend=True,
-        legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color='#e8e4ff')),
+        legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color='#6f4a4a')),
         margin=dict(l=20, r=120, t=50, b=20),
         annotations=[dict(
             text=f"€{total_spend:,.0f}",
-            font=dict(family='DM Serif Display', size=18, color='#e8e4ff'),
+            font=dict(family='DM Serif Display', size=18, color='#7d2e2e'),
             showarrow=False,
         )],
     )
@@ -318,8 +392,8 @@ with col_a:
         template='plotly_dark',
     )
     fig_bar.update_layout(
-        paper_bgcolor='#1a1a2e',
-        plot_bgcolor='#1a1a2e',
+        paper_bgcolor='#fffaf8',
+        plot_bgcolor='#fffaf8',
         legend_title_text='',
         legend=dict(orientation='h', y=-0.25, font_size=11),
         margin=dict(l=0, r=0, t=10, b=0),
@@ -345,17 +419,27 @@ with col_b:
         z=pivot.values,
         x=pivot.columns.tolist(),
         y=pivot.index.tolist(),
-        colorscale='Purples',
+        colorscale=[
+            [0.0, '#fff5f2'],
+            [0.2, '#f7d9d4'],
+            [0.4, '#eeb8b0'],
+            [0.6, '#dd8f86'],
+            [0.8, '#c76565'],
+            [1.0, '#9f3d3d']
+        ],
         hovertemplate='%{y} · %{x}<br>€%{z:,.2f}<extra></extra>',
-        colorbar=dict(tickfont=dict(color='#7c7caa'), title='€'),
+        colorbar=dict(
+        tickfont=dict(color='#7b5b5b'),
+        title='€'
+        ),
     ))
     fig_heat.update_layout(
-        paper_bgcolor='#1a1a2e',
-        plot_bgcolor='#1a1a2e',
-        xaxis=dict(tickfont=dict(color='#a0a0cc'), side='bottom'),
-        yaxis=dict(tickfont=dict(color='#a0a0cc')),
+        paper_bgcolor='#fffaf8',
+        plot_bgcolor='#fffaf8',
+        xaxis=dict(tickfont=dict(color='#7d2e2e'), side='bottom'),
+        yaxis=dict(tickfont=dict(color='#8a6a6a')),
         margin=dict(l=0, r=0, t=10, b=0),
-        font_color='#e8e4ff',
+        font_color='#5b3a3a',
     )
     st.plotly_chart(fig_heat, use_container_width=True)
 
@@ -367,7 +451,11 @@ with st.expander("📋 Raw Transactions", expanded=False):
         .sort_values('Order_Date', ascending=False)
         .reset_index(drop=True)
         .style.format({'Item_Price': '€{:.2f}'})
-        .background_gradient(subset=['Item_Price'], cmap='Purples'),
+        .background_gradient(subset=['Item_Price'], cmap='Reds'),
         use_container_width=True,
         height=350,
     )
+
+"""
+ValueError: 'Dark Reds' is not a valid value for cmap; supported values are 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r', 'GnBu', 'GnBu_r', 'Grays', 'Grays_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r', 'Pastel1', 'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r', 'Purples', 'Purples_r', 'RdBu', 'RdBu_r', 'RdGy', 'RdGy_r', 'RdPu', 'RdPu_r', 'RdYlBu', 'RdYlBu_r', 'RdYlGn', 'RdYlGn_r', 'Reds', 'Reds_r', 'Set1', 'Set1_r', 'Set2', 'Set2_r', 'Set3', 'Set3_r', 'Spectral', 'Spectral_r', 'Wistia', 'Wistia_r', 'YlGn', 'YlGnBu', 'YlGnBu_r', 'YlGn_r', 'YlOrBr', 'YlOrBr_r', 'YlOrRd', 'YlOrRd_r', 'afmhot', 'afmhot_r', 'autumn', 'autumn_r', 'berlin', 'berlin_r', 'binary', 'binary_r', 'bone', 'bone_r', 'brg', 'brg_r', 'bwr', 'bwr_r', 'cividis', 'cividis_r', 'cool', 'cool_r', 'coolwarm', 'coolwarm_r', 'copper', 'copper_r', 'cubehelix', 'cubehelix_r', 'flag', 'flag_r', 'gist_earth', 'gist_earth_r', 'gist_gray', 'gist_gray_r', 'gist_grey', 'gist_grey_r', 'gist_heat', 'gist_heat_r', 'gist_ncar', 'gist_ncar_r', 'gist_rainbow', 'gist_rainbow_r', 'gist_stern', 'gist_stern_r', 'gist_yarg', 'gist_yarg_r', 'gist_yerg', 'gist_yerg_r', 'gnuplot', 'gnuplot2', 'gnuplot2_r', 'gnuplot_r', 'gray', 'gray_r', 'grey', 'grey_r', 'hot', 'hot_r', 'hsv', 'hsv_r', 'inferno', 'inferno_r', 'jet', 'jet_r', 'magma', 'magma_r', 'managua', 'managua_r', 'nipy_spectral', 'nipy_spectral_r', 'ocean', 'ocean_r', 'pink', 'pink_r', 'plasma', 'plasma_r', 'prism', 'prism_r', 'rainbow', 'rainbow_r', 'seismic', 'seismic_r', 'spring', 'spring_r', 'summer', 'summer_r', 'tab10', 'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r', 'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r', 'twilight_shifted', 'twilight_shifted_r', 'vanimo', 'vanimo_r', 'viridis', 'viridis_r', 'winter', 'winter_r'
+"""
