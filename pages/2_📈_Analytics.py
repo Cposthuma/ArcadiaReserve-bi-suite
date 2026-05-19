@@ -367,7 +367,7 @@ if 'rarity' in articles_df.columns:
 
     rarity_stats = (
         articles_df.groupby('rarity')
-        .agg(Count=('card_prices', 'count'), Total=('card_prices', 'sum'), Avg=('card_prices', 'mean'))
+        .agg(Count=('card_price', 'count'), Total=('card_price', 'sum'), Avg=('card_price', 'mean'))
         .round(2)
         .sort_values('Total', ascending=False).reset_index()
     )
