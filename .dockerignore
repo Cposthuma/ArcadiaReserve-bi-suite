@@ -1,7 +1,7 @@
-.git
+﻿.git
 .gitignore
 __pycache__/
 *.pyc
 .venv/
-data/*.csv
-data/*.ods
+.env
+data/
