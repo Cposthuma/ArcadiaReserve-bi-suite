@@ -1,4 +1,4 @@
-services:
+﻿services:
   dashboard:
     build: .
     container_name: arcadia-bi-dashboard
@@ -9,3 +9,4 @@ services:
     volumes:
       - ./data:/app/data:ro
     restart: unless-stopped
+

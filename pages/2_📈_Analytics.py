@@ -1,496 +1,316 @@
-"""
-Analytics Dashboard – Enhanced
-Light mode, organic green-yellow accent
-"""
-import streamlit as st
+"""Clean analytics page with TCG-scoped sales patterns."""
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 
-from data_loader import load_orders_data, load_articles_data, render_data_reload_button
+from data_loader import load_articles_data, load_orders_data, render_data_reload_button
 
-# ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Analytics", page_icon="chart", layout="wide")
 render_data_reload_button(key="reload_analytics")
 
-# ── Palette — light mode ──────────────────────────────────────────────────────
-BG      = '#f4f7ee'   # warm off-white with a green tint
-SURFACE = '#e8eed8'   # slightly deeper card surface
-BORDER  = '#c8d4a8'   # soft sage border
-ACCENT  = '#5a8c1a'   # strong olive-green for accents
-ACCENT2 = '#2d4a0c'   # dark forest green for headings/values
-MUTED   = '#6b7c45'   # muted sage for subtitles
-GRID    = '#d4ddb8'   # light grid lines
-TEXT    = '#1e2a10'   # very dark green for readable body text
+ACCENT = "#5a8c1a"
+ACCENT_DARK = "#2d4a0c"
+MUTED = "#6b7c45"
+GRID = "#d4ddb8"
+PALETTE = ["#5a8c1a", "#4f9fd4", "#e07840", "#9b6cc4", "#d44f7c", "#3aab98"]
+EURO = "€"
 
-# Gradient scale (dark → accent) for single-metric charts
-GRAD = [[0, '#b8cc80'], [1.0, ACCENT]]
 
-# Full distinguishable palette for multi-series charts
-COUNTRY_PALETTE = [
-    '#4f9fd4',   # steel blue
-    '#e07840',   # warm orange
-    '#9b6cc4',   # soft purple
-    '#d44f7c',   # rose
-    '#3aab98',   # teal
-    '#c49820',   # gold
-    '#5a8c1a',   # olive green
-    '#d06060',   # coral
-]
+def money(value: float) -> str:
+    if pd.isna(value):
+        return "-"
+    return f"{EURO}{value:,.2f}"
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
-st.markdown(f"""
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap');
 
-  html, body, [class*="css"] {{
-    font-family: 'DM Sans', sans-serif;
-    background-color: {BG};
-    color: {TEXT};
-  }}
+def style_page() -> None:
+    st.markdown(
+        f"""
+        <style>
+          .block-container {{ padding-top: 1.4rem; }}
+          .metric-card {{
+            border: 1px solid {GRID};
+            border-radius: 8px;
+            padding: 15px 17px;
+            background: #fbfcf7;
+          }}
+          .metric-card .label {{ color: {MUTED}; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }}
+          .metric-card .value {{ color: {ACCENT_DARK}; font-size: 1.55rem; font-weight: 650; margin-top: 4px; }}
+          .metric-card .sub {{ color: {MUTED}; font-size: .82rem; margin-top: 2px; }}
+          h1, h2, h3 {{ color: {ACCENT_DARK}; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-  .metric-card {{
-    background: {SURFACE};
-    border: 1px solid {BORDER};
-    border-radius: 12px;
-    padding: 20px 24px;
-    text-align: center;
-    height: 100%;
-  }}
-  .metric-card .label {{
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: {MUTED};
-    margin-bottom: 6px;
-  }}
-  .metric-card .value {{
-    font-family: 'DM Serif Display', serif;
-    font-size: 2rem;
-    color: {ACCENT2};
-    line-height: 1.1;
-  }}
-  .metric-card .sub {{
-    font-size: 0.78rem;
-    color: {MUTED};
-    margin-top: 4px;
-  }}
 
-  .section-header {{
-    font-family: 'DM Serif Display', serif;
-    font-size: 1.25rem;
-    color: {ACCENT2};
-    margin: 8px 0 16px 0;
-    border-left: 3px solid {ACCENT};
-    padding-left: 12px;
-  }}
+def metric_card(col, label: str, value: str, sub: str = "") -> None:
+    col.markdown(
+        f"""
+        <div class="metric-card">
+          <div class="label">{label}</div>
+          <div class="value">{value}</div>
+          <div class="sub">{sub}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-  .block-container {{ padding-top: 1.5rem !important; }}
-  hr {{ border-color: {BORDER} !important; opacity: 1; }}
-</style>
-""", unsafe_allow_html=True)
 
-# ── Plotly base — light mode, margin excluded to avoid keyword conflicts ──────
-PLOTLY_BASE = dict(
-    paper_bgcolor=SURFACE,  # '#e8eed8' — slightly darker than page BG
-    plot_bgcolor=SURFACE,
-    font_color=TEXT,        # '#1e2a10' — always dark, always legible
-)
-M = dict(l=0, r=0, t=10, b=0)
+def tcg_options(articles: pd.DataFrame) -> list[str]:
+    if "tcg" not in articles.columns:
+        return ["Alle TCGs"]
+    values = sorted(v for v in articles["tcg"].dropna().astype(str).unique() if v and v != "Unknown")
+    if "Unknown" in set(articles["tcg"].dropna().astype(str)):
+        values.append("Unknown")
+    return ["Alle TCGs"] + values
 
-# ── Load data ─────────────────────────────────────────────────────────────────
-orders_df   = load_orders_data()
-articles_df = load_articles_data()
 
-if orders_df is None or orders_df.empty:
-    st.error("Could not load orders data.")
+def filter_articles_by_tcg(articles: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    selected = st.selectbox("TCG", tcg_options(articles), key="analytics_tcg_filter")
+    if selected == "Alle TCGs" or "tcg" not in articles.columns:
+        return articles.copy(), selected
+    return articles[articles["tcg"] == selected].copy(), selected
+
+
+def build_sales_facts(articles: pd.DataFrame, orders: pd.DataFrame) -> pd.DataFrame:
+    sales = articles.copy()
+    sales["price"] = pd.to_numeric(sales["price"], errors="coerce")
+    sales = sales.dropna(subset=["price"]).copy()
+
+    if "sold_date" in sales.columns:
+        sales["date"] = pd.to_datetime(sales["sold_date"], errors="coerce")
+    else:
+        sales["date"] = pd.NaT
+
+    order_cols = [c for c in ["order_id", "country", "date", "order_total"] if c in orders.columns]
+    if "order_id" in sales.columns and "order_id" in order_cols:
+        order_dim = orders[order_cols].copy()
+        order_dim["order_id"] = order_dim["order_id"].astype(str)
+        order_dim = order_dim.drop_duplicates(subset=["order_id"])
+        sales["order_id"] = sales["order_id"].astype(str)
+        sales = sales.merge(order_dim, on="order_id", how="left", suffixes=("", "_order"))
+        if "date_order" in sales.columns:
+            sales["date"] = sales["date"].combine_first(pd.to_datetime(sales["date_order"], errors="coerce"))
+            sales = sales.drop(columns=["date_order"])
+    if "country" not in sales.columns:
+        sales["country"] = "Unknown"
+    sales["country"] = sales["country"].fillna("Unknown").astype(str)
+    sales = sales.dropna(subset=["date"]).copy()
+    sales["weekday"] = sales["date"].dt.day_name()
+    sales["month"] = sales["date"].dt.to_period("M").dt.to_timestamp()
+    return sales
+
+
+style_page()
+orders = load_orders_data()
+articles = load_articles_data()
+
+if orders is None or orders.empty:
+    st.error("Geen orderdata gevonden.")
+    st.stop()
+if articles is None or articles.empty:
+    st.error("Geen artikeldata gevonden.")
     st.stop()
 
-if articles_df is None or articles_df.empty:
-    st.error("Could not load articles data.")
+st.title("Analytics")
+st.caption("Alle grafieken gebruiken artikelregels als bron, zodat een TCG-filter geen omzet uit andere TCG's meeneemt.")
+
+orders = orders.copy()
+articles = articles.copy()
+filtered_articles, selected_tcg = filter_articles_by_tcg(articles)
+sales = build_sales_facts(filtered_articles, orders)
+
+if sales.empty:
+    st.warning("Geen verkoopdata voor deze TCG-selectie.")
     st.stop()
 
-# ── Prep ──────────────────────────────────────────────────────────────────────
-orders_df['date'] = pd.to_datetime(orders_df['date'])
-orders_df['Month']            = orders_df['date'].dt.to_period('M').dt.to_timestamp()
-orders_df['MonthLabel']       = orders_df['date'].dt.strftime('%b %Y')
-orders_df['WeekDay']          = orders_df['date'].dt.day_name()
-orders_df['MonthNum']         = orders_df['date'].dt.month
-orders_df['MonthName']        = orders_df['date'].dt.strftime('%b')
-
-top_countries = orders_df['country'].value_counts().head(6).index.tolist()
-
-monthly_country = (
-    orders_df.groupby(['Month', 'country'])
-    .agg(Orders=('net_value', 'count'), Revenue=('net_value', 'sum'))
-    .reset_index()
+order_revenue = (
+    sales.groupby("order_id", as_index=False)
+    .agg(card_revenue=("price", "sum"), cards=("price", "count"))
+    .query("order_id != ''")
 )
-monthly_country['Revenue'] = monthly_country['Revenue'].round(2)
 
-# ── Page header ───────────────────────────────────────────────────────────────
-st.markdown(
-    f"<h1 style='font-family:DM Serif Display,serif; color:{ACCENT2}; margin-bottom:4px;'>📈 Analytics</h1>"
-    f"<p style='color:{MUTED}; font-size:0.9rem; margin-top:0;'>Deep-dive into geography, timing, buyer behaviour &amp; article trends</p>",
-    unsafe_allow_html=True,
-)
+top_country = sales["country"].value_counts().idxmax()
+median_order = order_revenue["card_revenue"].median() if not order_revenue.empty else pd.NA
+low_value_share = (order_revenue["card_revenue"].lt(5).mean() * 100) if not order_revenue.empty else 0
+best_weekday = sales["weekday"].value_counts().idxmax()
+
+c1, c2, c3, c4 = st.columns(4)
+metric_card(c1, "Top land", str(top_country), f"{sales['country'].value_counts().max()} singles")
+metric_card(c2, "Median TCG-order", money(median_order), "Kaartomzet binnen selectie")
+metric_card(c3, f"TCG-orders < {EURO}5", f"{low_value_share:.1f}%" if not order_revenue.empty else "-", "Op kaartomzet selectie")
+metric_card(c4, "Beste weekday", best_weekday, "Meeste verkochte singles")
+
+if selected_tcg != "Alle TCGs":
+    st.caption(f"Actieve scope: {selected_tcg}. Order-gerelateerde grafieken tellen alleen artikelomzet van deze TCG; orderdata wordt alleen gebruikt voor land/datum-koppeling.")
+
 st.divider()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 1 — Geography
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="section-header">🌍 Geography</div>', unsafe_allow_html=True)
-
-country_orders_ser = orders_df['country'].value_counts()
-country_rev        = orders_df.groupby('country')['net_value'].sum().round(2)
-top4               = country_orders_ser.head(4)
-
-g1, g2, g3, g4 = st.columns(4)
-for col, country in zip([g1, g2, g3, g4], top4.index):
-    pct = top4[country] / len(orders_df) * 100
-    rev = country_rev.get(country, 0)
-    col.markdown(f"""
-    <div class="metric-card">
-      <div class="label">#{list(top4.index).index(country)+1} — {country}</div>
-      <div class="value">{top4[country]:,}</div>
-      <div class="sub">{pct:.1f}% of orders · €{rev:,.2f} net</div>
-    </div>""", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Map left, donut right
-col_map, col_donut = st.columns([3, 2])
-
-with col_map:
-    country_data = (
-        orders_df.groupby('country')
-        .agg(order_count=('net_value', 'count'), net_revenue=('net_value', 'sum'))
-        .reset_index()
+if "tcg" in articles.columns and selected_tcg == "Alle TCGs":
+    tcg_summary = (
+        articles.assign(price=pd.to_numeric(articles["price"], errors="coerce"))
+        .dropna(subset=["price"])
+        .groupby("tcg", as_index=False)
+        .agg(singles=("price", "count"), revenue=("price", "sum"), avg_price=("price", "mean"))
+        .sort_values("revenue", ascending=False)
     )
-    country_data['net_revenue'] = country_data['net_revenue'].round(2)
-
-    fig_map = px.choropleth(
-        country_data,
-        locations='country',
-        locationmode='country names',
-        color='order_count',
-        hover_name='country',
-        hover_data={'net_revenue': ':,.2f', 'order_count': True},
-        color_continuous_scale=[[0, '#c8dca0'], [0.35, '#7aac30'], [1.0, ACCENT]],
-    )
-    fig_map.update_geos(
-        scope='europe',
-        projection_scale=1.3,
-        showland=True,
-        landcolor='#dde8c0',
-        showcountries=True,
-        countrycolor=BORDER,
-        countrywidth=0.8,
-        bgcolor=BG,
-    )
-    fig_map.update_layout(
-        **PLOTLY_BASE,
-        geo_bgcolor=BG,
-        coloraxis_colorbar=dict(tickfont=dict(color=MUTED), title='Orders'),
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=420,
-    )
-    st.plotly_chart(fig_map, use_container_width=True)
-
-with col_donut:
-    # Revenue per country as a donut
-    rev_donut = (
-        orders_df.groupby('country')['net_value']
-        .sum().round(2).reset_index()
-        .sort_values('net_value', ascending=False)
-    )
-    fig_donut = px.pie(
-        rev_donut,
-        names='country',
-        values='net_value',
-        hole=0.52,
-        color_discrete_sequence=COUNTRY_PALETTE,
-    )
-    fig_donut.update_traces(
-        textposition='outside',
-        textinfo='label+percent',
-        hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
-    )
-    fig_donut.update_layout(
-        paper_bgcolor=SURFACE,
-        font_color=TEXT,
-        showlegend=False,
-        annotations=[dict(
-            text='Revenue',
-            font=dict(family='DM Serif Display', size=14, color=TEXT),
-            showarrow=False,
-        )],
-        margin=dict(l=80, r=80, t=60, b=80),
-        height=420,
-    )
-    st.plotly_chart(fig_donut, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 2 — Cumulative Orders by country
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="section-header">📈 Cumulative Orders by country</div>', unsafe_allow_html=True)
-
-df_sorted = orders_df.sort_values('date').copy()
-cumulative_data = []
-for country in top_countries:
-    country_series = df_sorted[df_sorted['country'] == country]['date']
-    all_dates      = sorted(df_sorted['date'].unique())
-    cumulative_count = 0
-    for date in all_dates:
-        cumulative_count += (country_series == date).sum()
-        cumulative_data.append({
-            'date': date,
-            'country': country,
-            'Cumulative Orders': cumulative_count,
-        })
-
-cumulative_df = pd.DataFrame(cumulative_data)
-
-fig_cumulative = px.area(
-    cumulative_df,
-    x='date', y='Cumulative Orders',
-    color='country',
-    color_discrete_sequence=COUNTRY_PALETTE,
-)
-fig_cumulative.update_traces(hovertemplate='<b>%{fullData.name}</b><br>%{y}<extra></extra>')
-fig_cumulative.update_layout(
-    **PLOTLY_BASE,
-    xaxis_title='',
-    yaxis_title='Total Orders',
-    hovermode='x unified',
-    legend_title_text='',
-    legend=dict(orientation='h', y=-0.15),
-    yaxis=dict(gridcolor=GRID),
-    xaxis=dict(showgrid=False),
-    height=380,
-    margin=M,
-)
-st.plotly_chart(fig_cumulative, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 3 — Monthly Revenue by Top Countries — STACKED BAR
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="section-header">💶 Monthly Revenue by Top Countries</div>', unsafe_allow_html=True)
-
-monthly_top = (
-    monthly_country[monthly_country['country'].isin(top_countries)]
-    .copy()
-)
-monthly_top['MonthLabel'] = monthly_top['Month'].dt.strftime('%b %Y')
-
-fig_stacked = px.bar(
-    monthly_top,
-    x='MonthLabel', y='Revenue',
-    color='country',
-    color_discrete_sequence=COUNTRY_PALETTE,
-    labels={'Revenue': 'Net Revenue (€)', 'MonthLabel': ''},
-    barmode='stack',
-)
-fig_stacked.update_traces(
-    hovertemplate='<b>%{fullData.name}</b><br>€%{y:,.2f}<extra></extra>',
-)
-fig_stacked.update_layout(
-    **PLOTLY_BASE,
-    hovermode='x unified',
-    legend_title_text='',
-    legend=dict(orientation='h', y=-0.15),
-    yaxis=dict(tickprefix='€', gridcolor=GRID, tickformat=',.2f'),
-    xaxis=dict(showgrid=False, tickangle=-30),
-    height=420,
-    margin=M,
-)
-st.plotly_chart(fig_stacked, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 4 — Orders by Day of Week
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="section-header">🕐 Orders by Day of Week</div>', unsafe_allow_html=True)
-
-day_order  = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-dow_counts = (
-    orders_df['WeekDay'].value_counts()
-    .reindex(day_order).reset_index()
-)
-dow_counts.columns = ['Day', 'Orders']
-
-fig_dow = px.bar(
-    dow_counts,
-    x='Day', y='Orders',
-    labels={'Day': '', 'Orders': 'Orders'},
-    color='Orders',
-    color_continuous_scale=GRAD,
-)
-fig_dow.update_traces(hovertemplate='<b>%{x}</b><br>%{y} orders<extra></extra>')
-fig_dow.update_layout(
-    **PLOTLY_BASE,
-    coloraxis_showscale=False,
-    yaxis=dict(gridcolor=GRID),
-    xaxis=dict(tickangle=-20),
-    height=340,
-    margin=M,
-)
-st.plotly_chart(fig_dow, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 5 — Orders by Value Bracket
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="section-header">💰 Orders by Value Bracket</div>', unsafe_allow_html=True)
-
-bins   = [0, 5, 10, 20, 50, 100, 200, float('inf')]
-labels = ['<€5', '€5–10', '€10–20', '€20–50', '€50–100', '€100–200', '€200+']
-orders_df['Value Bucket'] = pd.cut(orders_df['net_value'], bins=bins, labels=labels)
-bucket_data = orders_df['Value Bucket'].value_counts().reindex(labels).reset_index()
-bucket_data.columns = ['Bucket', 'Count']
-
-fig_bucket = px.bar(
-    bucket_data,
-    x='Bucket', y='Count',
-    labels={'Bucket': 'Order Value', 'Count': 'Orders'},
-    color='Count',
-    color_continuous_scale=GRAD,
-)
-fig_bucket.update_traces(hovertemplate='<b>%{x}</b><br>%{y} orders<extra></extra>')
-fig_bucket.update_layout(
-    **PLOTLY_BASE,
-    coloraxis_showscale=False,
-    xaxis=dict(tickangle=-20),
-    yaxis=dict(gridcolor=GRID),
-    height=340,
-    margin=M,
-)
-st.plotly_chart(fig_bucket, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 7 — Rarity Breakdown
-# ══════════════════════════════════════════════════════════════════════════════
-if 'rarity' in articles_df.columns:
-    st.markdown('<div class="section-header">✨ Rarity Breakdown</div>', unsafe_allow_html=True)
-
-    rarity_stats = (
-        articles_df.groupby('rarity')
-        .agg(Count=('price', 'count'), Total=('price', 'sum'), Avg=('price', 'mean'))
-        .round(2)
-        .sort_values('Total', ascending=False).reset_index()
-    )
-
-    col_rar1, col_rar2, col_rar3 = st.columns(3)
-
-    with col_rar1:
-        fig_rar_count = px.pie(
-            rarity_stats,
-            names='rarity', values='Count',
-            hole=0.5,
-            color_discrete_sequence=COUNTRY_PALETTE,
-        )
-        fig_rar_count.update_traces(
-            textposition='none',
-            textinfo='none',
-            hovertemplate='<b>%{label}</b><br>%{value} cards<br>%{percent}<extra></extra>',
-        )
-        fig_rar_count.update_layout(
-            paper_bgcolor=SURFACE,
-            font_color=TEXT,
-            title=dict(text='Cards Sold by Rarity', font=dict(color=TEXT, size=12), x=0.5, xanchor='center'),
-            showlegend=True,
-            legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color=TEXT)),
-            margin=dict(l=20, r=120, t=50, b=20),
-            height=400,
-        )
-        st.plotly_chart(fig_rar_count, use_container_width=True)
-
-    with col_rar2:
-        fig_rar_rev = px.pie(
-            rarity_stats,
-            names='rarity', values='Total',
-            hole=0.5,
-            color_discrete_sequence=COUNTRY_PALETTE,
-        )
-        fig_rar_rev.update_traces(
-            textposition='none',
-            textinfo='none',
-            hovertemplate='<b>%{label}</b><br>€%{value:,.2f}<br>%{percent}<extra></extra>',
-        )
-        fig_rar_rev.update_layout(
-            paper_bgcolor=SURFACE,
-            font_color=TEXT,
-            title=dict(text='Revenue Share by Rarity', font=dict(color=TEXT, size=12), x=0.5, xanchor='center'),
-            showlegend=True,
-            legend=dict(orientation='v', x=1.05, y=0.5, xanchor='left', yanchor='middle', font=dict(color=TEXT)),
-            margin=dict(l=20, r=120, t=50, b=20),
-            height=400,
-        )
-        st.plotly_chart(fig_rar_rev, use_container_width=True)
-
-    with col_rar3:
-        # Fix: sort ascending so bars grow left-to-right, give generous left margin
-        # so long rarity names aren't cut off, and use automargin on xaxis
-        rarity_sorted = rarity_stats.sort_values('Avg')
-        fig_rar_avg = px.bar(
-            rarity_sorted,
-            x='rarity', y='Avg',
-            labels={'rarity': 'Rarity', 'Avg': 'Avg Price (€)'},
-            color='Avg',
-            color_continuous_scale=GRAD,
-        )
-        fig_rar_avg.update_traces(
-            hovertemplate='<b>%{x}</b><br>€%{y:.2f}<extra></extra>',
-        )
-        fig_rar_avg.update_layout(
-            **PLOTLY_BASE,
-            title=dict(text='Avg Price per Rarity', font=dict(color=TEXT, size=12), x=0),
-            coloraxis_showscale=False,
-            xaxis=dict(tickangle=-30, automargin=True),
-            yaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
-            margin=dict(l=0, r=0, t=30, b=60),
-            height=400,
-        )
-        st.plotly_chart(fig_rar_avg, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Section 8 — Set Performance
-# ══════════════════════════════════════════════════════════════════════════════
-if 'set_name' in articles_df.columns:
-    st.markdown('<div class="section-header">📦 Set Performance — Volume vs Revenue</div>', unsafe_allow_html=True)
-
-    set_stats = (
-        articles_df.groupby('set_name')
-        .agg(Cards_Sold=('price', 'count'),
-             Total_Revenue=('price', 'sum'),
-             Avg_Price=('price', 'mean'))
-        .round(2)
-        .reset_index()
-    )
-
-    fig_scatter = px.scatter(
-        set_stats,
-        x='Cards_Sold', y='Total_Revenue',
-        size='Avg_Price',
-        color='Avg_Price',
-        hover_name='set_name',
-        color_continuous_scale=GRAD,
-        labels={
-            'Cards_Sold':    'Cards Sold',
-            'Total_Revenue': 'Total Revenue (€)',
-            'Avg_Price':     'Avg Card Price (€)',
-        },
-        size_max=40,
-    )
-    fig_scatter.update_traces(
-        hovertemplate='<b>%{hovertext}</b><br>Cards Sold: %{x}<br>Revenue: €%{y:,.2f}<extra></extra>',
-    )
-    fig_scatter.update_layout(
-        **PLOTLY_BASE,
-        coloraxis_colorbar=dict(
-            title='Avg €',
-            tickfont=dict(color=MUTED),
-            tickformat=',.2f',
+    st.subheader("TCG overzicht")
+    st.dataframe(
+        tcg_summary.rename(columns={"tcg": "TCG", "singles": "Singles", "revenue": "Omzet", "avg_price": "Gem. prijs"}).style.format(
+            {"Omzet": f"{EURO}{{:.2f}}", "Gem. prijs": f"{EURO}{{:.2f}}"}
         ),
-        xaxis=dict(gridcolor=GRID),
-        yaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
-        height=480,
-        margin=M,
+        width="stretch",
+        hide_index=True,
     )
-    st.plotly_chart(fig_scatter, use_container_width=True)
+
+country = (
+    sales.groupby("country", as_index=False)
+    .agg(singles=("price", "count"), orders=("order_id", "nunique"), revenue=("price", "sum"), avg_card=("price", "mean"))
+    .sort_values("revenue", ascending=False)
+    .head(10)
+)
+
+left, right = st.columns([3, 2])
+with left:
+    fig = px.bar(
+        country,
+        x="revenue",
+        y="country",
+        orientation="h",
+        color="revenue",
+        color_continuous_scale=[[0, "#c8dca0"], [1, ACCENT]],
+        text="revenue",
+        labels={"country": "", "revenue": "Omzet"},
+    )
+    fig.update_traces(texttemplate=f"{EURO}%{{text:,.0f}}", hovertemplate=f"%{{y}}<br>Omzet: {EURO}%{{x:,.2f}}<extra></extra>")
+    fig.update_layout(
+        title="Top landen op TCG-kaartomzet",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=45, b=0),
+        xaxis=dict(tickprefix=EURO, gridcolor=GRID),
+        yaxis=dict(autorange="reversed"),
+        coloraxis_showscale=False,
+    )
+    st.plotly_chart(fig, width="stretch")
+
+with right:
+    st.dataframe(
+        country.rename(columns={"country": "Land", "singles": "Singles", "orders": "Orders", "revenue": "Omzet", "avg_card": "Gem. kaart"}).style.format(
+            {"Omzet": f"{EURO}{{:.2f}}", "Gem. kaart": f"{EURO}{{:.2f}}"}
+        ),
+        width="stretch",
+        height=420,
+        hide_index=True,
+    )
+
+bins = [0, 1, 2, 5, 10, 20, 50, 100, 200, float("inf")]
+labels = [f"<{EURO}1", f"{EURO}1-2", f"{EURO}2-5", f"{EURO}5-10", f"{EURO}10-20", f"{EURO}20-50", f"{EURO}50-100", f"{EURO}100-200", f"{EURO}200+"]
+order_revenue["value_bucket"] = pd.cut(order_revenue["card_revenue"], bins=bins, labels=labels, include_lowest=True)
+buckets = order_revenue["value_bucket"].value_counts().reindex(labels).fillna(0).reset_index()
+buckets.columns = ["Bucket", "Orders"]
+
+weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+weekdays = sales["weekday"].value_counts().reindex(weekday_order).fillna(0).reset_index()
+weekdays.columns = ["Weekday", "Singles"]
+
+left, right = st.columns(2)
+with left:
+    fig = px.bar(buckets, x="Bucket", y="Orders", color="Orders", color_continuous_scale=[[0, "#c8dca0"], [1, ACCENT]])
+    fig.update_layout(
+        title="TCG-orders per waardebucket",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=45, b=0),
+        yaxis=dict(gridcolor=GRID),
+        coloraxis_showscale=False,
+    )
+    st.plotly_chart(fig, width="stretch")
+
+with right:
+    fig = px.bar(weekdays, x="Weekday", y="Singles", color="Singles", color_continuous_scale=[[0, "#c8dca0"], [1, ACCENT]])
+    fig.update_layout(
+        title="Singles per weekdag",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=45, b=0),
+        xaxis=dict(tickangle=-25),
+        yaxis=dict(gridcolor=GRID),
+        coloraxis_showscale=False,
+    )
+    st.plotly_chart(fig, width="stretch")
+
+monthly = (
+    sales.groupby("month", as_index=False)
+    .agg(singles=("price", "count"), revenue=("price", "sum"), orders=("order_id", "nunique"))
+    .sort_values("month")
+)
+monthly["month_label"] = monthly["month"].dt.strftime("%b %Y")
+
+fig = px.bar(
+    monthly,
+    x="month_label",
+    y="revenue",
+    color="singles",
+    color_continuous_scale=[[0, "#c8dca0"], [1, ACCENT]],
+    labels={"month_label": "", "revenue": "Omzet", "singles": "Singles"},
+)
+fig.update_layout(
+    title="TCG-kaartomzet per maand",
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin=dict(l=0, r=0, t=45, b=0),
+    yaxis=dict(tickprefix=EURO, gridcolor=GRID),
+    coloraxis_colorbar=dict(title="Singles"),
+)
+st.plotly_chart(fig, width="stretch")
+
+set_group = ["tcg", "set_name"] if "tcg" in sales.columns else ["set_name"]
+set_stats = (
+    sales.groupby(set_group, as_index=False)
+    .agg(cards=("price", "count"), revenue=("price", "sum"), avg_price=("price", "mean"))
+    .sort_values("revenue", ascending=False)
+    .head(15)
+)
+
+st.subheader("Top sets")
+fig = px.bar(
+    set_stats,
+    x="revenue",
+    y="set_name",
+    orientation="h",
+    color="tcg" if "tcg" in set_stats.columns and selected_tcg == "Alle TCGs" else "avg_price",
+    color_continuous_scale=[[0, "#c8dca0"], [1, ACCENT]],
+    color_discrete_sequence=PALETTE,
+    hover_data={"cards": True, "avg_price": ":.2f"},
+    labels={"set_name": "", "revenue": "Omzet", "avg_price": "Gem. prijs", "tcg": "TCG"},
+)
+fig.update_layout(
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    margin=dict(l=0, r=0, t=10, b=0),
+    xaxis=dict(tickprefix=EURO, gridcolor=GRID),
+    yaxis=dict(autorange="reversed"),
+    coloraxis_colorbar=dict(title=f"Gem. {EURO}"),
+)
+st.plotly_chart(fig, width="stretch")
+
+card_group = ["tcg", "name", "set_name"] if "tcg" in sales.columns else ["name", "set_name"]
+card_stats = (
+    sales.groupby(card_group, as_index=False)
+    .agg(aantal=("price", "count"), omzet=("price", "sum"), gem_prijs=("price", "mean"))
+    .sort_values("omzet", ascending=False)
+    .head(25)
+)
+columns = {"tcg": "TCG", "name": "Kaart", "set_name": "Set", "aantal": "Aantal", "omzet": "Omzet", "gem_prijs": "Gem. prijs"}
+st.subheader("Top kaarten")
+st.dataframe(
+    card_stats.rename(columns=columns).style.format({"Omzet": f"{EURO}{{:.2f}}", "Gem. prijs": f"{EURO}{{:.2f}}"}),
+    width="stretch",
+    height=420,
+    hide_index=True,
+)
+
+with st.expander("Controle: ruwe analytics scope"):
+    display_cols = [c for c in ["date", "order_id", "tcg", "country", "name", "set_name", "price"] if c in sales.columns]
+    st.dataframe(sales[display_cols].sort_values("date", ascending=False), width="stretch")

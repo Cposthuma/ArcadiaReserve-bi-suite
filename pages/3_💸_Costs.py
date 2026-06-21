@@ -27,6 +27,8 @@ by_cat = df.groupby("cost_category", as_index=False).agg(spend=("item_price", "s
 
 c1, c2 = st.columns(2)
 with c1:
-    st.plotly_chart(px.line(monthly, x="month", y="spend", markers=True, title="Kosten per maand"), use_container_width=True)
+    st.plotly_chart(px.line(monthly, x="month", y="spend", markers=True, title="Kosten per maand"), width="stretch")
 with c2:
-    st.plotly_chart(px.bar(by_cat, x="cost_category", y="spend", title="Kosten per categorie"), use_container_width=True)
+    st.plotly_chart(px.bar(by_cat, x="cost_category", y="spend", title="Kosten per categorie"), width="stretch")
+
+

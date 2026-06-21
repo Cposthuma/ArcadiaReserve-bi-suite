@@ -51,3 +51,4 @@ Wil je een andere lokale data-map gebruiken, pas dan de volume-regel in `docker-
 volumes:
   - /pad/naar/jouw/data:/app/data:ro
 ```
+

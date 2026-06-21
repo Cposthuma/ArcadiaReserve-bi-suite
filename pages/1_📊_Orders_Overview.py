@@ -1,373 +1,302 @@
-"""
-Orders Overview Dashboard — Teal / light-blue theme
-"""
-import streamlit as st
+"""Clean order overview focused on values that exist in Cardmarket exports."""
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 
 from data_loader import load_articles_data, load_orders_data, render_data_reload_button
 
-# ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Orders Overview", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Orders Overview", page_icon="EUR", layout="wide")
 render_data_reload_button(key="reload_orders_overview")
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG        = '#f0f8f8'   # very light teal-white — blends with white Streamlit bg
-SURFACE   = '#dff0f0'   # card surface: soft teal wash
-BORDER    = '#a8d4d4'   # card border: muted teal
-ACCENT    = '#1a9090'   # primary teal
-ACCENT2   = '#0d5c6e'   # deep teal for headings / values
-MUTED     = '#5c8a8a'   # muted teal for subtitles & labels
-GRID      = '#cce4e4'   # light grid lines
-TEXT      = '#0d2e2e'   # very dark teal for body text
-POS       = '#1aab8a'   # positive delta — green-teal
-NEG       = '#d45c5c'   # negative delta — warm red
+ACCENT = "#1a9090"
+ACCENT_DARK = "#0d5c6e"
+MUTED = "#5c7373"
+GRID = "#d7e8e8"
+WARNING = "#f0a64f"
+DANGER = "#d95f6a"
+BLUE = "#6aaed6"
 
-# Gradient scale for single-metric charts: pale teal → strong teal
-TEAL_GRAD = [[0, '#9fd8d8'], [1.0, ACCENT]]
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
-st.markdown(f"""
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap');
+def money(value: float) -> str:
+    if pd.isna(value):
+        return "-"
+    return f"€{value:,.2f}"
 
-  html, body, [class*="css"] {{
-    font-family: 'DM Sans', sans-serif;
-    background-color: {BG};
-    color: {TEXT};
-  }}
 
-  .metric-card {{
-    background: {SURFACE};
-    border: 1px solid {BORDER};
-    border-radius: 12px;
-    padding: 20px 24px;
-    text-align: center;
-    height: 100%;
-  }}
-  .metric-card .label {{
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: {MUTED};
-    margin-bottom: 6px;
-  }}
-  .metric-card .value {{
-    font-family: 'DM Serif Display', serif;
-    font-size: 2rem;
-    color: {ACCENT2};
-    line-height: 1.1;
-  }}
-  .metric-card .sub {{
-    font-size: 0.78rem;
-    color: {MUTED};
-    margin-top: 4px;
-  }}
-  .metric-card .delta-pos {{
-    font-size: 0.8rem;
-    color: {POS};
-    margin-top: 4px;
-  }}
-  .metric-card .delta-neg {{
-    font-size: 0.8rem;
-    color: {NEG};
-    margin-top: 4px;
-  }}
+def available_sum(df: pd.DataFrame, column: str) -> float | None:
+    if column not in df or df[column].dropna().empty:
+        return None
+    return float(df[column].sum(skipna=True))
 
-  .section-header {{
-    font-family: 'DM Serif Display', serif;
-    font-size: 1.25rem;
-    color: {ACCENT2};
-    margin: 8px 0 16px 0;
-    border-left: 3px solid {ACCENT};
-    padding-left: 12px;
-  }}
 
-  .store-link {{
-    display: inline-block;
-    background: {SURFACE};
-    border: 1px solid {ACCENT};
-    border-radius: 8px;
-    padding: 6px 16px;
-    color: {ACCENT2} !important;
-    font-size: 0.85rem;
-    text-decoration: none;
-    margin-bottom: 16px;
-  }}
+def tcg_options(df: pd.DataFrame) -> list[str]:
+    if df is None or df.empty or "tcg" not in df.columns:
+        return ["Alle TCGs"]
+    values = sorted(v for v in df["tcg"].dropna().astype(str).unique() if v and v != "Unknown")
+    if "Unknown" in set(df["tcg"].dropna().astype(str)):
+        values.append("Unknown")
+    return ["Alle TCGs"] + values
 
-  .block-container {{ padding-top: 1.5rem !important; }}
-  hr {{ border-color: {BORDER} !important; opacity: 1; }}
-</style>
-""", unsafe_allow_html=True)
 
-# ── Shared Plotly base — light teal background, no margin (set per chart) ────
-PLOTLY_BASE = dict(
-    paper_bgcolor=BG,
-    plot_bgcolor=BG,
-    font_color=TEXT,
-)
-M = dict(l=0, r=0, t=10, b=0)
+def style_page() -> None:
+    st.markdown(
+        f"""
+        <style>
+          .block-container {{ padding-top: 1.4rem; }}
+          .metric-card {{
+            border: 1px solid {GRID};
+            border-radius: 8px;
+            padding: 16px 18px;
+            background: #f8fbfb;
+          }}
+          .metric-card .label {{ color: {MUTED}; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }}
+          .metric-card .value {{ color: {ACCENT_DARK}; font-size: 1.65rem; font-weight: 650; margin-top: 4px; }}
+          .metric-card .sub {{ color: {MUTED}; font-size: .82rem; margin-top: 2px; }}
+          h1, h2, h3 {{ color: {ACCENT_DARK}; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# ── Load data ─────────────────────────────────────────────────────────────────
-df          = load_orders_data()
-articles_df = load_articles_data()
 
-if df is None or df.empty:
-    st.error("Could not load orders data.")
+def metric_card(col, label: str, value: str, sub: str = "") -> None:
+    col.markdown(
+        f"""
+        <div class="metric-card">
+          <div class="label">{label}</div>
+          <div class="value">{value}</div>
+          <div class="sub">{sub}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+style_page()
+orders = load_orders_data()
+articles = load_articles_data()
+
+if orders is None or orders.empty:
+    st.error("Geen orderdata gevonden. Zet je Cardmarket Sold Shipments CSV's in data/orders.")
     st.stop()
 
-if articles_df is None or articles_df.empty:
-    st.error("Could not load articles data.")
-    st.stop()
-
-# ── Prep ──────────────────────────────────────────────────────────────────────
-df['date'] = pd.to_datetime(df['date'])
-df['Month']            = df['date'].dt.to_period('M').dt.to_timestamp()
-df['MonthLabel']       = df['date'].dt.strftime('%b %Y')
-df['Cumulative Net']   = df['net_value'].cumsum()
-
-monthly = (
-    df.groupby('Month')
-    .agg(Orders=('net_value', 'count'), Net_Revenue=('net_value', 'sum'))
-    .reset_index()
-)
-monthly['MonthLabel'] = monthly['Month'].dt.strftime('%b %Y')
-
-if len(monthly) >= 2:
-    last_rev  = monthly.iloc[-1]['Net_Revenue']
-    prev_rev  = monthly.iloc[-2]['Net_Revenue']
-    rev_delta = last_rev - prev_rev
-    rev_pct   = (rev_delta / prev_rev * 100) if prev_rev else 0
+orders = orders.copy()
+articles = articles.copy() if articles is not None and not articles.empty else pd.DataFrame()
+if not articles.empty and "tcg" in articles.columns:
+    selected_tcg = st.selectbox("TCG", tcg_options(articles), key="orders_tcg_filter")
+    if selected_tcg != "Alle TCGs":
+        articles = articles[articles["tcg"] == selected_tcg].copy()
+        if "order_id" in articles.columns and "order_id" in orders.columns:
+            order_ids = set(articles["order_id"].dropna().astype(str))
+            orders = orders[orders["order_id"].astype(str).isin(order_ids)].copy()
 else:
-    rev_delta = rev_pct = 0
+    selected_tcg = "Alle TCGs"
+orders["date"] = pd.to_datetime(orders["date"])
+orders["month"] = orders["date"].dt.to_period("M").dt.to_timestamp()
+orders["card_value"] = pd.to_numeric(orders["gross_value"], errors="coerce")
+orders["shipping"] = pd.to_numeric(orders["shipping_cost"], errors="coerce") if "shipping_cost" in orders else pd.NA
+orders["fees"] = pd.to_numeric(orders["commission"], errors="coerce") if "commission" in orders else pd.NA
+orders["order_total_export"] = pd.to_numeric(orders["order_total"], errors="coerce") if "order_total" in orders else pd.NA
+orders["value_after_fees"] = orders["card_value"] - orders["fees"] if orders["fees"].notna().any() else pd.NA
 
-# ── Page header ───────────────────────────────────────────────────────────────
-st.markdown(
-    f"<h1 style='font-family:DM Serif Display,serif; color:{ACCENT2}; margin-bottom:4px;'>📊 Orders Overview</h1>"
-    f"<p style='color:{MUTED}; font-size:0.9rem; margin-top:0;'>Sales performance across all shipped orders &amp; articles</p>",
-    unsafe_allow_html=True,
-)
-st.markdown(
-    "<a class='store-link' href='https://www.cardmarket.com/en/Magic/Users/ExCardin' target='_blank'>"
-    "🔗 Visit ExCardin's Cardmarket Store</a>",
-    unsafe_allow_html=True,
-)
-st.divider()
+total_orders = len(orders)
+article_revenue = available_sum(articles, "price") if not articles.empty else None
+card_revenue = article_revenue if selected_tcg != "Alle TCGs" and article_revenue is not None else available_sum(orders, "card_value")
+shipping_revenue = available_sum(orders, "shipping")
+fees = available_sum(orders, "fees")
+order_total = available_sum(orders, "order_total_export")
+value_after_fees = available_sum(orders, "value_after_fees")
+article_count = len(articles) if articles is not None and not articles.empty else None
 
-# ── KPI Row 1 — Orders ────────────────────────────────────────────────────────
-st.markdown('<div class="section-header">Orders</div>', unsafe_allow_html=True)
+st.title("Orders Overview")
+st.caption("Alleen waarden uit de lokale Cardmarket exports. Geen demo- of placeholderdata.")
+
+if not articles.empty and "tcg" in articles.columns:
+    tcg_summary = (
+        articles.groupby("tcg", as_index=False)
+        .agg(singles=("price", "count"), card_revenue=("price", "sum"), orders=("order_id", "nunique"))
+        .sort_values("card_revenue", ascending=False)
+    )
+    st.subheader("Sales per TCG")
+    st.dataframe(
+        tcg_summary.rename(columns={"tcg": "TCG", "singles": "Singles", "card_revenue": "Kaartomzet", "orders": "Orders"}).style.format(
+            {"Kaartomzet": "\u20ac{:.2f}"}
+        ),
+        width="stretch",
+        hide_index=True,
+    )
 
 k1, k2, k3, k4, k5 = st.columns(5)
+metric_card(k1, "Orders", f"{total_orders:,}", f"{orders['date'].min():%d %b} - {orders['date'].max():%d %b %Y}")
+metric_card(k2, "Order total", money(order_total), "Total Value uit export")
+metric_card(k3, "Kaartwaarde", money(card_revenue), f"{article_count:,} singles" if article_count is not None else "")
+metric_card(k4, "Shipping charged", money(shipping_revenue), "Shipment Costs uit export")
+metric_card(k5, "Cardmarket fees", money(fees), "Commission uit export")
 
-commission_pct = (df['commission'].sum() / df['gross_value'].sum() * 100) if df['gross_value'].sum() else 0
-avg_order_val  = df['net_value'].mean()
-best_month_row = monthly.loc[monthly['Net_Revenue'].idxmax()]
+if value_after_fees is not None:
+    st.caption(f"Kaartwaarde na Cardmarket fees: {money(value_after_fees)}. Dit is berekend uit aanwezige exportkolommen, niet uit ingevulde fallbackwaardes.")
+if selected_tcg != "Alle TCGs":
+    st.caption("Bij een TCG-filter komt kaartwaarde uit artikelregels; shipping en fees blijven orderwaarden voor orders met die TCG.")
 
-for col, label, val, sub in [
-    (k1, "Total Orders",     f"{len(df):,}",                        f"{monthly['Orders'].mean():.1f} avg / month"),
-    (k2, "Gross Revenue",    f"€{df['gross_value'].sum():,.2f}",    "incl. shipping"),
-    (k3, "Total Commission", f"€{df['commission'].sum():,.2f}",     f"{commission_pct:.1f}% of gross"),
-    (k4, "Net Revenue",      f"€{df['net_value'].sum():,.2f}",      f"avg €{avg_order_val:.2f} / order"),
-    (k5, "Best Month",       best_month_row['MonthLabel'],          f"€{best_month_row['Net_Revenue']:,.2f} net"),
-]:
-    col.markdown(f"""
-    <div class="metric-card">
-      <div class="label">{label}</div>
-      <div class="value">{val}</div>
-      <div class="sub">{sub}</div>
-    </div>""", unsafe_allow_html=True)
+st.divider()
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ── KPI Row 2 — Articles ──────────────────────────────────────────────────────
-st.markdown('<div class="section-header">Singles Sold</div>', unsafe_allow_html=True)
-
-a1, a2, a3, a4 = st.columns(4)
-
-median_price = articles_df['price'].median()
-top_card     = articles_df.loc[articles_df['price'].idxmax()] if not articles_df.empty else None
-
-for col, label, val, sub in [
-    (a1, "Singles Sold",     f"{len(articles_df):,}",                       "individual cards"),
-    (a2, "Articles Revenue", f"€{articles_df['price'].sum():,.2f}",   "total card value"),
-    (a3, "Avg Card Price",   f"€{articles_df['price'].mean():,.2f}",  f"median €{median_price:.2f}"),
-    (a4, "Highest Sale",
-         f"€{top_card['price']:.2f}" if top_card is not None else "—",
-         top_card['name'] if top_card is not None and 'name' in top_card else ""),
-]:
-    col.markdown(f"""
-    <div class="metric-card">
-      <div class="label">{label}</div>
-      <div class="value">{val}</div>
-      <div class="sub">{sub}</div>
-    </div>""", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ── Revenue Over Time ─────────────────────────────────────────────────────────
-st.markdown('<div class="section-header">Revenue Over Time</div>', unsafe_allow_html=True)
-
-col_left, col_right = st.columns([3, 2])
-
-with col_left:
-    fig_cum = go.Figure()
-    fig_cum.add_trace(go.Scatter(
-        x=df['date'],
-        y=df['Cumulative Net'],
-        mode='lines',
-        fill='tozeroy',
-        line=dict(color=ACCENT, width=2),
-        fillcolor='rgba(26,144,144,0.12)',
-        hovertemplate='%{x|%d %b %Y}<br>€%{y:,.2f}<extra>Cumulative Net</extra>',
-    ))
-    fig_cum.update_layout(
-        **PLOTLY_BASE,
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor=GRID, tickprefix='€', tickformat=',.2f'),
-        hovermode='x unified',
-        margin=M,
+monthly = (
+    orders.groupby("month", as_index=False)
+    .agg(
+        orders=("order_id", "count"),
+        order_total=("order_total_export", "sum"),
+        cards=("card_value", "sum"),
+        shipping=("shipping", "sum"),
+        fees=("fees", "sum"),
+        value_after_fees=("value_after_fees", "sum"),
     )
-    st.plotly_chart(fig_cum, use_container_width=True)
+)
+monthly["month_label"] = monthly["month"].dt.strftime("%b %Y")
 
-with col_right:
-    fig_mbar = px.bar(
-        monthly,
-        x='MonthLabel', y='Net_Revenue',
-        labels={'MonthLabel': '', 'Net_Revenue': 'Net Revenue (€)'},
-        color='Net_Revenue',
-        color_continuous_scale=TEAL_GRAD,
+left, right = st.columns([3, 2])
+
+with left:
+    monthly_parts = monthly.melt(
+        id_vars=["month_label"],
+        value_vars=["cards", "shipping"],
+        var_name="Component",
+        value_name="Value",
+    ).dropna(subset=["Value"])
+    monthly_parts["Component"] = monthly_parts["Component"].map({"cards": "Kaartwaarde", "shipping": "Shipping charged"})
+    fig = px.bar(
+        monthly_parts,
+        x="month_label",
+        y="Value",
+        color="Component",
+        color_discrete_map={"Kaartwaarde": ACCENT, "Shipping charged": BLUE},
+        labels={"month_label": "", "Value": "Waarde"},
     )
-    fig_mbar.update_traces(hovertemplate='<b>%{x}</b><br>€%{y:,.2f}<extra></extra>')
-    fig_mbar.update_layout(
-        **PLOTLY_BASE,
-        coloraxis_showscale=False,
-        xaxis=dict(tickangle=-45),
-        yaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
-        margin=M,
+    fig.add_scatter(
+        x=monthly["month_label"],
+        y=monthly["fees"],
+        name="Cardmarket fees",
+        mode="lines+markers",
+        line=dict(color=DANGER, width=2),
+        hovertemplate="%{x}<br>Fees: €%{y:,.2f}<extra></extra>",
     )
-    st.plotly_chart(fig_mbar, use_container_width=True)
-
-# ── Order Volume & Cost Breakdown ─────────────────────────────────────────────
-st.markdown('<div class="section-header">Order Volume &amp; Cost Breakdown</div>', unsafe_allow_html=True)
-
-col_a, col_b = st.columns(2)
-
-with col_a:
-    fig_orders = px.bar(
-        monthly,
-        x='MonthLabel', y='Orders',
-        labels={'MonthLabel': '', 'Orders': 'Orders'},
-        color='Orders',
-        color_continuous_scale=TEAL_GRAD,
+    fig.update_layout(
+        title="Maandelijkse exportwaarden",
+        barmode="stack",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=45, b=0),
+        yaxis=dict(tickprefix="€", gridcolor=GRID),
+        legend=dict(orientation="h", y=-0.18),
+        hovermode="x unified",
     )
-    fig_orders.update_traces(hovertemplate='<b>%{x}</b><br>%{y} orders<extra></extra>')
-    fig_orders.update_layout(
-        **PLOTLY_BASE,
-        coloraxis_showscale=False,
-        xaxis=dict(tickangle=-45),
-        yaxis=dict(gridcolor=GRID),
-        margin=M,
-    )
-    st.plotly_chart(fig_orders, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
-with col_b:
-    total_gross = df['gross_value'].sum()
-    total_net   = df['net_value'].sum()
-    total_comm  = df['commission'].sum()
+with right:
+    components = []
+    if card_revenue is not None:
+        components.append({"Component": "Kaartwaarde", "Value": card_revenue})
+    if shipping_revenue is not None:
+        components.append({"Component": "Shipping charged", "Value": shipping_revenue})
+    if fees is not None:
+        components.append({"Component": "Cardmarket fees", "Value": fees})
 
-    breakdown = pd.DataFrame({
-        'Component': ['Net Revenue (Merchandise + Shipping)', 'Commission'],
-        'Value':     [round(total_net, 2), round(total_comm, 2)],
-    })
-    fig_donut = px.pie(
-        breakdown,
-        names='Component', values='Value',
-        hole=0.55,
-        color='Component',
-        color_discrete_map={
-            'Net Revenue': '#7b5ea7',
-            'Commission':  '#e05c6c',
-        },
-        template='plotly_dark',
-        title='Revenue vs Commission Breakdown',
+    fig = px.bar(
+        pd.DataFrame(components),
+        x="Component",
+        y="Value",
+        color="Component",
+        text="Value",
+        color_discrete_map={"Kaartwaarde": ACCENT, "Shipping charged": BLUE, "Cardmarket fees": DANGER},
     )
-    fig_donut.update_traces(textposition='outside', textinfo='label+percent')
-    fig_donut.update_layout(
-        paper_bgcolor=BG,
+    fig.update_traces(texttemplate="€%{text:,.0f}", hovertemplate="%{x}: €%{y:,.2f}<extra></extra>")
+    fig.update_layout(
+        title="Beschikbare totalen",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=45, b=0),
+        yaxis=dict(tickprefix="€", gridcolor=GRID),
         showlegend=False,
-        margin=dict(l=80, r=80, t=60, b=80),
-        title=dict(
-            text='Revenue vs Commission Breakdown',
-            font=dict(family='DM Serif Display', size=16, color=ACCENT2),
-            x=0.5,
-            xanchor='center',
-        ),
-        annotations=[dict(
-            text=f"€{total_gross:,.0f}",
-            font=dict(family='DM Serif Display', size=18, color=ACCENT2),
-            showarrow=False,
-        )],
     )
-    st.plotly_chart(fig_donut, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
-# ── Card Price Distribution ───────────────────────────────────────────────────
-st.markdown('<div class="section-header">Card Price Distribution</div>', unsafe_allow_html=True)
+st.subheader("Orderregels")
 
-col_x, col_y = st.columns([2, 3])
+recent = orders.sort_values("date", ascending=False).head(20).copy()
+recent["order_label"] = recent["order_id"].astype(str).where(
+    recent["order_id"].astype(str).str.len() > 0,
+    recent["date"].dt.strftime("%d %b"),
+)
+parts = recent.sort_values("date").melt(
+    id_vars=["order_label"],
+    value_vars=["card_value", "shipping", "fees"],
+    var_name="Component",
+    value_name="Value",
+).dropna(subset=["Value"])
+parts["Component"] = parts["Component"].map({"card_value": "Kaartwaarde", "shipping": "Shipping charged", "fees": "Cardmarket fees"})
 
-with col_x:
-    fig_hist = px.histogram(
-        articles_df,
-        x='price',
-        nbins=30,
-        labels={'price': 'Card Price (€)', 'count': 'Count'},
-        color_discrete_sequence=[ACCENT],
+chart_col, table_col = st.columns([3, 2])
+
+with chart_col:
+    fig = px.bar(
+        parts,
+        x="order_label",
+        y="Value",
+        color="Component",
+        color_discrete_map={"Kaartwaarde": ACCENT, "Shipping charged": BLUE, "Cardmarket fees": DANGER},
     )
-    fig_hist.update_traces(hovertemplate='€%{x:.2f}<br>%{y} cards<extra></extra>')
-    fig_hist.update_layout(
-        **PLOTLY_BASE,
-        bargap=0.05,
-        xaxis=dict(tickprefix='€', tickformat=',.2f', gridcolor=GRID),
-        yaxis=dict(gridcolor=GRID),
-        margin=M,
+    fig.update_layout(
+        title="Laatste 20 orders met beschikbare exportwaarden",
+        barmode="stack",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=45, b=0),
+        xaxis=dict(tickangle=-35),
+        yaxis=dict(tickprefix="€", gridcolor=GRID),
+        legend_title_text="",
     )
-    st.plotly_chart(fig_hist, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
-with col_y:
-    bins   = [0, 0.5, 1, 2, 5, 10, 25, 50, float('inf')]
-    labels = ['<€0.50', '€0.50–1', '€1–2', '€2–5', '€5–10', '€10–25', '€25–50', '€50+']
-    articles_df['Price Bucket'] = pd.cut(articles_df['price'], bins=bins, labels=labels)
-    bucket_counts = articles_df['Price Bucket'].value_counts().reindex(labels).reset_index()
-    bucket_counts.columns = ['Bucket', 'Count']
-
-    fig_buck = px.bar(
-        bucket_counts,
-        x='Bucket', y='Count',
-        labels={'Bucket': 'Price Range', 'Count': 'Cards Sold'},
-        color='Count',
-        color_continuous_scale=TEAL_GRAD,
+with table_col:
+    table = recent[
+        ["date", "order_id", "country", "card_value", "shipping", "fees", "order_total_export", "value_after_fees"]
+    ].rename(
+        columns={
+            "date": "Datum",
+            "order_id": "Order",
+            "country": "Land",
+            "card_value": "Kaartwaarde",
+            "shipping": "Shipping",
+            "fees": "Fees",
+            "order_total_export": "Order total",
+            "value_after_fees": "Kaartwaarde na fees",
+        }
     )
-    fig_buck.update_traces(hovertemplate='<b>%{x}</b><br>%{y} cards<extra></extra>')
-    fig_buck.update_layout(
-        **PLOTLY_BASE,
-        coloraxis_showscale=False,
-        xaxis=dict(tickangle=-20),
-        yaxis=dict(gridcolor=GRID),
-        margin=M,
-    )
-    st.plotly_chart(fig_buck, use_container_width=True)
-
-# ── Raw orders table ──────────────────────────────────────────────────────────
-with st.expander("📋 Raw Orders", expanded=False):
-    display_cols = [c for c in ['date', 'gross_value', 'commission', 'net_value'] if c in df.columns]
     st.dataframe(
-        df[display_cols]
-        .sort_values('date', ascending=False)
-        .reset_index(drop=True)
-        .style
-        .format({c: '€{:.2f}' for c in ['gross_value', 'commission', 'net_value'] if c in display_cols})
-        .background_gradient(subset=['net_value'], cmap='Blues'),
-        use_container_width=True,
-        height=350,
+        table.style.format(
+            {
+                "Datum": "{:%d-%m-%Y}",
+                "Kaartwaarde": "€{:.2f}",
+                "Shipping": "€{:.2f}",
+                "Fees": "€{:.2f}",
+                "Order total": "€{:.2f}",
+                "Kaartwaarde na fees": "€{:.2f}",
+            },
+            na_rep="-",
+        ),
+        width="stretch",
+        height=420,
     )
+
+if not articles.empty and "tcg" in articles.columns:
+    with st.expander("Ruwe artikeldata voor TCG-overzicht"):
+        display_cols = [c for c in ["sold_date", "order_id", "tcg", "name", "set_name", "category", "price"] if c in articles.columns]
+        st.dataframe(articles[display_cols].sort_values(display_cols[0], ascending=False), width="stretch")
+
+with st.expander("Ruwe orderdata"):
+    display_cols = [
+        c
+        for c in ["date", "order_id", "country", "article_count", "gross_value", "shipping_cost", "order_total", "commission", "net_value"]
+        if c in orders.columns
+    ]
+    st.dataframe(orders[display_cols].sort_values("date", ascending=False), width="stretch")
