@@ -135,7 +135,7 @@ metric_card(k4, "Shipping charged", money(shipping_revenue), "Shipment Costs uit
 metric_card(k5, "Cardmarket fees", money(fees), "Commission uit export")
 
 if value_after_fees is not None:
-    st.caption(f"Kaartwaarde na Cardmarket fees: {money(value_after_fees)}. Dit is berekend uit aanwezige exportkolommen, niet uit ingevulde fallbackwaardes.")
+    st.caption(f"Kaartwaarde na Cardmarket fees: {money(value_after_fees)}. Dit is berekend uit aanwezige exportkolommen")
 if selected_tcg != "Alle TCGs":
     st.caption("Bij een TCG-filter komt kaartwaarde uit artikelregels; shipping en fees blijven orderwaarden voor orders met die TCG.")
 

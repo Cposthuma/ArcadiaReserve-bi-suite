@@ -1,9 +1,9 @@
-﻿services:
+services:
   dashboard:
     build: .
     container_name: arcadia-bi-dashboard
     ports:
-      - "8501:8501"
+      - "8104:8501"
     environment:
       DATA_DIR: /app/data
     volumes:
